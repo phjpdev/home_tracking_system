@@ -1,130 +1,274 @@
 {
+  "phase": "1.4-prototype-wifi",
   "coordinate_system": {
-    "origin": "building NW corner (top-left of floor plan)",
+    "origin": "NW corner of the floor-plan envelope (top-left)",
     "x_axis": "east (+x = right on plan)",
     "y_axis": "south (+y = down on plan)",
     "z_axis": "up (+z = ceiling)",
     "units": "millimetres",
-    "building_size_mm": [
-      17500,
-      5000
+    "envelope_mm": [
+      19800,
+      10200
     ],
+    "interior_bounds_mm": {
+      "x_min": 1700,
+      "x_max": 17900,
+      "y_min": 4500,
+      "y_max": 8700
+    },
     "ceiling_height_mm": 3000
+  },
+  "rooms": {
+    "K/WZ": {
+      "x_mm": [
+        1700,
+        6700
+      ],
+      "y_mm": [
+        4500,
+        8400
+      ],
+      "in_scope": true,
+      "scope_note": "full tracking",
+      "trackable_polygon_mm": [
+        [
+          2400,
+          8700
+        ],
+        [
+          2500,
+          4500
+        ],
+        [
+          10000,
+          4500
+        ],
+        [
+          10000,
+          6500
+        ],
+        [
+          6300,
+          6500
+        ],
+        [
+          6300,
+          8700
+        ]
+      ]
+    },
+    "BZ": {
+      "x_mm": [
+        6700,
+        8420
+      ],
+      "y_mm": [
+        6400,
+        8400
+      ],
+      "in_scope": false,
+      "scope_note": "out of scope this round",
+      "trackable_polygon_mm": null
+    },
+    "SZ": {
+      "x_mm": [
+        8420,
+        12100
+      ],
+      "y_mm": [
+        4500,
+        8400
+      ],
+      "in_scope": false,
+      "scope_note": "no camera this round (entry/exit deferred)",
+      "trackable_polygon_mm": null
+    },
+    "Yoga": {
+      "x_mm": [
+        12100,
+        17800
+      ],
+      "y_mm": [
+        4500,
+        8400
+      ],
+      "in_scope": true,
+      "scope_note": "full tracking",
+      "trackable_polygon_mm": [
+        [
+          14100,
+          4800
+        ],
+        [
+          17900,
+          4800
+        ],
+        [
+          17900,
+          8300
+        ],
+        [
+          14100,
+          8300
+        ]
+      ]
+    }
   },
   "cameras": [
     {
       "id": 1,
-      "name": "cam_kwz_ne",
+      "name": "cam_kwz_sw",
       "room": "K/WZ",
-      "role": "Tracking (kitchen + dining)",
+      "role": "Tracking (K/WZ south-west, looks NE-ish)",
       "mount": {
-        "x_mm": 7900,
-        "y_mm": 300,
+        "x_mm": 2500,
+        "y_mm": 8600,
         "z_mm": 3000,
-        "yaw_deg": 145,
+        "yaw_deg": 330,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "OV2640",
+        "model": "wifi-prototype-OV2640",
+        "transport": "wifi",
+        "stream_proto": "rtsp-or-mjpeg",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
         "stream_resolution": [
           640,
           480
         ],
-        "stream_fps": 12
+        "stream_fps": 12,
+        "ir_night": false
       }
     },
     {
       "id": 2,
-      "name": "cam_kwz_sw",
+      "name": "cam_kwz_nw",
       "room": "K/WZ",
-      "role": "Tracking (sofa + entry, overlaps cam 1 for re-ID)",
+      "role": "Tracking (K/WZ north-west, looks SE-ish)",
       "mount": {
-        "x_mm": 300,
-        "y_mm": 4700,
+        "x_mm": 2500,
+        "y_mm": 5200,
         "z_mm": 3000,
-        "yaw_deg": 325,
+        "yaw_deg": 25,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "OV2640",
+        "model": "wifi-prototype-OV2640",
+        "transport": "wifi",
+        "stream_proto": "rtsp-or-mjpeg",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
         "stream_resolution": [
           640,
           480
         ],
-        "stream_fps": 12
+        "stream_fps": 12,
+        "ir_night": false
       }
     },
     {
       "id": 3,
-      "name": "cam_bz_door",
-      "room": "BZ",
-      "role": "Presence-only (bathroom door watcher)",
+      "name": "cam_kwz_ne",
+      "room": "K/WZ",
+      "role": "Tracking (K/WZ north-east on K/WZ-BZ frame, looks SW-ish into K/WZ + east into BZ/SZ strip)",
       "mount": {
-        "x_mm": 4400,
-        "y_mm": 2700,
+        "x_mm": 6200,
+        "y_mm": 4900,
         "z_mm": 3000,
-        "yaw_deg": 270,
-        "tilt_deg": 60
+        "yaw_deg": 155,
+        "tilt_deg": 35
       },
       "sensor": {
-        "model": "OV2640",
+        "model": "wifi-prototype-OV2640",
+        "transport": "wifi",
+        "stream_proto": "rtsp-or-mjpeg",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
         "stream_resolution": [
           640,
           480
         ],
-        "stream_fps": 12
+        "stream_fps": 12,
+        "ir_night": false
       }
     },
     {
       "id": 4,
-      "name": "cam_sz_door",
-      "room": "SZ",
-      "role": "Presence-only (bedroom entry watcher)",
+      "name": "cam_kwz_se",
+      "room": "K/WZ",
+      "role": "Tracking (K/WZ middle-east on K/WZ-BZ frame, looks NW-ish into K/WZ + along BZ/SZ strip)",
       "mount": {
-        "x_mm": 8400,
-        "y_mm": 3500,
+        "x_mm": 6300,
+        "y_mm": 6400,
         "z_mm": 3000,
-        "yaw_deg": 180,
-        "tilt_deg": 55
+        "yaw_deg": 330,
+        "tilt_deg": 35
       },
       "sensor": {
-        "model": "OV2640",
+        "model": "wifi-prototype-OV2640",
+        "transport": "wifi",
+        "stream_proto": "rtsp-or-mjpeg",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
         "stream_resolution": [
           640,
           480
         ],
-        "stream_fps": 12
+        "stream_fps": 12,
+        "ir_night": false
       }
     },
     {
       "id": 5,
-      "name": "cam_yoga",
+      "name": "cam_yoga_ne",
       "room": "Yoga",
-      "role": "Tracking (full yoga room)",
+      "role": "Tracking (Yoga north-east, looks SW-ish)",
       "mount": {
-        "x_mm": 12900,
-        "y_mm": 300,
+        "x_mm": 17800,
+        "y_mm": 4900,
         "z_mm": 3000,
-        "yaw_deg": 45,
+        "yaw_deg": 155,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "OV2640",
+        "model": "wifi-prototype-OV2640",
+        "transport": "wifi",
+        "stream_proto": "rtsp-or-mjpeg",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
         "stream_resolution": [
           640,
           480
         ],
-        "stream_fps": 12
+        "stream_fps": 12,
+        "ir_night": false
+      }
+    },
+    {
+      "id": 6,
+      "name": "cam_yoga_se",
+      "room": "Yoga",
+      "role": "Tracking (Yoga south-west on SZ-Yoga frame, looks NE-ish; stereo with cam 5)",
+      "mount": {
+        "x_mm": 14200,
+        "y_mm": 8200,
+        "z_mm": 3000,
+        "yaw_deg": 330,
+        "tilt_deg": 35
+      },
+      "sensor": {
+        "model": "wifi-prototype-OV2640",
+        "transport": "wifi",
+        "stream_proto": "rtsp-or-mjpeg",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution": [
+          640,
+          480
+        ],
+        "stream_fps": 12,
+        "ir_night": false
       }
     }
   ]
