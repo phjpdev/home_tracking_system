@@ -1,0 +1,131 @@
+{
+  "coordinate_system": {
+    "origin": "building NW corner (top-left of floor plan)",
+    "x_axis": "east (+x = right on plan)",
+    "y_axis": "south (+y = down on plan)",
+    "z_axis": "up (+z = ceiling)",
+    "units": "millimetres",
+    "building_size_mm": [
+      17500,
+      5000
+    ],
+    "ceiling_height_mm": 3000
+  },
+  "cameras": [
+    {
+      "id": 1,
+      "name": "cam_kwz_ne",
+      "room": "K/WZ",
+      "role": "Tracking (kitchen + dining)",
+      "mount": {
+        "x_mm": 7900,
+        "y_mm": 300,
+        "z_mm": 3000,
+        "yaw_deg": 145,
+        "tilt_deg": 35
+      },
+      "sensor": {
+        "model": "OV2640",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution": [
+          640,
+          480
+        ],
+        "stream_fps": 12
+      }
+    },
+    {
+      "id": 2,
+      "name": "cam_kwz_sw",
+      "room": "K/WZ",
+      "role": "Tracking (sofa + entry, overlaps cam 1 for re-ID)",
+      "mount": {
+        "x_mm": 300,
+        "y_mm": 4700,
+        "z_mm": 3000,
+        "yaw_deg": 325,
+        "tilt_deg": 35
+      },
+      "sensor": {
+        "model": "OV2640",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution": [
+          640,
+          480
+        ],
+        "stream_fps": 12
+      }
+    },
+    {
+      "id": 3,
+      "name": "cam_bz_door",
+      "room": "BZ",
+      "role": "Presence-only (bathroom door watcher)",
+      "mount": {
+        "x_mm": 4400,
+        "y_mm": 2700,
+        "z_mm": 3000,
+        "yaw_deg": 270,
+        "tilt_deg": 60
+      },
+      "sensor": {
+        "model": "OV2640",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution": [
+          640,
+          480
+        ],
+        "stream_fps": 12
+      }
+    },
+    {
+      "id": 4,
+      "name": "cam_sz_door",
+      "room": "SZ",
+      "role": "Presence-only (bedroom entry watcher)",
+      "mount": {
+        "x_mm": 8400,
+        "y_mm": 3500,
+        "z_mm": 3000,
+        "yaw_deg": 180,
+        "tilt_deg": 55
+      },
+      "sensor": {
+        "model": "OV2640",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution": [
+          640,
+          480
+        ],
+        "stream_fps": 12
+      }
+    },
+    {
+      "id": 5,
+      "name": "cam_yoga",
+      "room": "Yoga",
+      "role": "Tracking (full yoga room)",
+      "mount": {
+        "x_mm": 12900,
+        "y_mm": 300,
+        "z_mm": 3000,
+        "yaw_deg": 45,
+        "tilt_deg": 35
+      },
+      "sensor": {
+        "model": "OV2640",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution": [
+          640,
+          480
+        ],
+        "stream_fps": 12
+      }
+    }
+  ]
+}
