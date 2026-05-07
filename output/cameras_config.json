@@ -56,7 +56,8 @@
           9200
         ]
       ],
-      "privacy_thermal_polygon_mm": null
+      "privacy_thermal_polygon_mm": null,
+      "privacy_hardware_mounts_mm": null
     },
     "BZ": {
       "x_mm": [
@@ -95,7 +96,21 @@
           6400,
           9100
         ]
-      ]
+      ],
+      "privacy_hardware_mounts_mm": {
+        "thermal_ceiling_mount_mm": {
+          "x_mm": 8105,
+          "y_mm": 8027,
+          "z_mm": 3000
+        },
+        "water_leak_floor_mount_mm": {
+          "x_mm": 7450,
+          "y_mm": 8900,
+          "z_mm": 0,
+          "placement_note": "Floor mount inside BZ thermal zone (L-tab). Adjust after site survey \u2014 target shower curb / wet drain path; used as secondary channel with ceiling thermal."
+        },
+        "mount_note": "Thermal: ceiling as SZ. Water leak: floor device (Zigbee); adjust xy after site survey inside privacy_thermal_polygon_mm."
+      }
     },
     "SZ": {
       "x_mm": [
@@ -126,7 +141,15 @@
           10100,
           8000
         ]
-      ]
+      ],
+      "privacy_hardware_mounts_mm": {
+        "thermal_ceiling_mount_mm": {
+          "x_mm": 12150,
+          "y_mm": 6500,
+          "z_mm": 3000
+        },
+        "mount_note": "Ceiling-mounted AMG8833/MLX class grid; (x,y) is centroid of privacy_thermal_polygon_mm; z = ceiling_height_mm."
+      }
     },
     "Yoga": {
       "x_mm": [
@@ -157,7 +180,8 @@
           8800
         ]
       ],
-      "privacy_thermal_polygon_mm": null
+      "privacy_thermal_polygon_mm": null,
+      "privacy_hardware_mounts_mm": null
     },
     "Hallway": {
       "x_mm": [
@@ -188,7 +212,31 @@
           8000
         ]
       ],
-      "privacy_thermal_polygon_mm": null
+      "privacy_thermal_polygon_mm": null,
+      "privacy_hardware_mounts_mm": null
+    }
+  },
+  "privacy_hardware_mounts_mm": {
+    "coordinate_frame": "floor-plan envelope mm: origin NW, +x east, +y south; thermal z = ceiling; leak z = floor",
+    "SZ": {
+      "thermal_ceiling_mount_mm": {
+        "x_mm": 12150,
+        "y_mm": 6500,
+        "z_mm": 3000
+      }
+    },
+    "BZ": {
+      "thermal_ceiling_mount_mm": {
+        "x_mm": 8105,
+        "y_mm": 8027,
+        "z_mm": 3000
+      },
+      "water_leak_floor_mount_mm": {
+        "x_mm": 7450,
+        "y_mm": 8900,
+        "z_mm": 0,
+        "placement_note": "Floor mount inside BZ thermal zone (L-tab). Adjust after site survey \u2014 target shower curb / wet drain path; used as secondary channel with ceiling thermal."
+      }
     }
   },
   "privacy_thermal_zones_mm": {

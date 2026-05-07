@@ -60,8 +60,12 @@ USAGE
     python3 generate_camera_plan.py
 
 Outputs (written to ./output/):
-    camera_placement_plan.png   — annotated floor plan image
-    cameras_config.json         — machine-readable camera config
+    camera_placement_plan.png   — annotated floor plan image (cameras,
+                                  thermal BZ/SZ footprints, and privacy
+                                  hardware mount markers with mm coords)
+    cameras_config.json         — machine-readable camera config +
+                                  privacy_thermal_zones_mm,
+                                  privacy_hardware_mounts_mm (SZ/BZ)
 
 To adjust placements, edit the CAMERAS list below and re-run.
 
@@ -74,6 +78,7 @@ The script expects ./floor_plan.png to be present alongside it.
 
 from pathlib import Path
 import json
+
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -125,6 +130,9 @@ INTERIOR_X_MAX_MM = 17900
 INTERIOR_Y_MIN_MM =  2500
 # Must cover the tallest client-defined thermal footprints (BZ extends to y=9100).
 INTERIOR_Y_MAX_MM =  9100
+
+# Ceiling height above floor (+z); cameras + thermal privacy grids mount here.
+CEILING_H_MM = 3000
 
 # Per-room interior bounds (left-to-right), matching the colour
 # overlays the client drew on the updated floor_plan.png.
@@ -223,6 +231,59 @@ PRIVACY_THERMAL_ZONES_MM: dict[str, list[tuple[int, int]]] = {
 
 SZ_REST_ZONE_POLYGON_MM: list[tuple[int, int]] | None = None
 
+
+def _polygon_centroid_mm(vertices: list[tuple[int, int]]) -> tuple[float, float]:
+    """Closed-polygon centroid in mm (matches thermal footprint polygons)."""
+    xa = np.array([v[0] for v in vertices], dtype=np.float64)
+    ya = np.array([v[1] for v in vertices], dtype=np.float64)
+    xn = np.roll(xa, -1)
+    yn = np.roll(ya, -1)
+    cross = xa * yn - xn * ya
+    area = float(np.sum(cross) * 0.5)
+    if abs(area) < 1e-9:
+        return float(np.mean(xa)), float(np.mean(ya))
+    cx = float(np.sum((xa + xn) * cross) / (6.0 * area))
+    cy = float(np.sum((ya + yn) * cross) / (6.0 * area))
+    return cx, cy
+
+
+def _rnd_mm(v: float) -> int:
+    return int(round(v))
+
+
+# ----------------------------------------------------------------------
+# Privacy hardware: definitive mount coordinates (generated PNG + JSON).
+# Thermal grids: CEILING-mounted, (x,y) = polygon centroid in plan view;
+# z = CEILING_H_MM. Re-derived whenever PRIVACY_THERMAL_ZONES_MM changes.
+# BZ water-leak sensor: floor, z = 0; edit after site survey (keep inside
+# the BZ thermal polygon, typically shower egress / drainage path).
+# ----------------------------------------------------------------------
+_sz_cx, _sz_cy = _polygon_centroid_mm(PRIVACY_THERMAL_ZONES_MM["SZ"])
+_bz_cx, _bz_cy = _polygon_centroid_mm(PRIVACY_THERMAL_ZONES_MM["BZ"])
+PRIVACY_THERMAL_CEILING_MOUNT_MM: dict[str, dict[str, int]] = {
+    "SZ": {
+        "x_mm": _rnd_mm(_sz_cx),
+        "y_mm": _rnd_mm(_sz_cy),
+        "z_mm": CEILING_H_MM,
+    },
+    "BZ": {
+        "x_mm": _rnd_mm(_bz_cx),
+        "y_mm": _rnd_mm(_bz_cy),
+        "z_mm": CEILING_H_MM,
+    },
+}
+
+BZ_WATER_LEAK_FLOOR_MOUNT_MM = {
+    "x_mm": 7450,
+    "y_mm": 8900,
+    "z_mm": 0,
+    "placement_note": (
+        "Floor mount inside BZ thermal zone (L-tab). Adjust after site "
+        "survey — target shower curb / wet drain path; used as secondary "
+        "channel with ceiling thermal."
+    ),
+}
+
 # Tunables mirrored into output/cameras_config.json ``thermal_fall_detection``.
 THERMAL_FALL_DETECTION_EXPORT = {
     "rapid_transition_max_s":        1.0,
@@ -248,9 +309,6 @@ GLASS_WALLS = (
     "north wall (K/WZ + BZ + SZ + Yoga continuous glazing)",
     "south sliding doors (K/WZ + SZ + Yoga)",
 )
-
-# Ceiling height, default mounting height for ceiling-mounted cameras.
-CEILING_H_MM = 3000
 
 # Pixel-per-millimetre scale (used to project mm coords onto the image).
 # Note: the image's vertical pixel scale is slightly compressed vs.
@@ -487,6 +545,72 @@ def draw_privacy_thermal_zones(ax) -> None:
                     linewidth=1.2, linestyle="-", zorder=6))
 
 
+def draw_privacy_hardware_mounts(ax) -> None:
+    """Mark thermal ceiling mounts + BZ floor water-leak (plan view xy)."""
+    for room_code, mt in PRIVACY_THERMAL_CEILING_MOUNT_MM.items():
+        px, py = mm_to_px(mt["x_mm"], mt["y_mm"])
+        face = PRIVACY_THERMAL_FACE[room_code]
+        ax.scatter(
+            [px], [py],
+            s=320,
+            marker="s",
+            c=face,
+            edgecolors="white",
+            linewidths=2.0,
+            zorder=16,
+            clip_on=False,
+        )
+        bx = px + 14
+        by = py - (18 if room_code == "SZ" else -18)
+        ax.text(
+            bx,
+            by,
+            f"{room_code} thermal\n(x,y,z)=({mt['x_mm']}, {mt['y_mm']}, {mt['z_mm']}) mm",
+            fontsize=7,
+            fontweight="bold",
+            color="white",
+            ha="left",
+            va="top" if room_code == "SZ" else "bottom",
+            bbox=dict(
+                boxstyle="round,pad=0.35",
+                facecolor=face,
+                edgecolor="white",
+                linewidth=1.2),
+            zorder=17,
+            clip_on=False,
+        )
+
+    wl = BZ_WATER_LEAK_FLOOR_MOUNT_MM
+    px_w, py_w = mm_to_px(wl["x_mm"], wl["y_mm"])
+    ax.scatter(
+        [px_w], [py_w],
+        s=300,
+        marker="o",
+        c="#00acc1",
+        edgecolors="white",
+        linewidths=2.0,
+        zorder=16,
+        clip_on=False,
+    )
+    ax.text(
+        px_w + 14,
+        py_w + 16,
+        f"BZ leak\n(x,y,z)=({wl['x_mm']}, {wl['y_mm']}, {wl['z_mm']}) mm",
+        fontsize=7,
+        fontweight="bold",
+        color="white",
+        ha="left",
+        va="bottom",
+        bbox=dict(
+            boxstyle="round,pad=0.35",
+            facecolor="#00838f",
+            edgecolor="white",
+            linewidth=1.2),
+        zorder=17,
+        clip_on=False,
+    )
+
+
 def trackable_clip_path(room: str) -> MplPath:
     """Build a matplotlib clip Path from a room's TRACKABLE_AREAS_MM
     polygon (mm vertices projected to image pixel coords). Used to
@@ -607,6 +731,7 @@ def render_floor_plan() -> None:
         draw_trackable_outline(ax, room)
 
     draw_privacy_thermal_zones(ax)
+    draw_privacy_hardware_mounts(ax)
 
     room_clips = {room: trackable_clip_path(room)
                   for room in TRACKABLE_AREAS_MM}
@@ -628,6 +753,15 @@ def render_floor_plan() -> None:
         mpatches.Patch(facecolor="#6b4bc4", alpha=PRIVACY_THERMAL_ALPHA,
                        edgecolor="#6b4bc4",
                        label="Thermal IR fall-detection footprint (SZ)"),
+        plt.Line2D([0], [0], marker="s", linestyle="none", color="#c44bd6",
+                   markeredgecolor="white", markersize=10,
+                   label="BZ thermal ceiling mount (coords on label)"),
+        plt.Line2D([0], [0], marker="s", linestyle="none", color="#6b4bc4",
+                   markeredgecolor="white", markersize=10,
+                   label="SZ thermal ceiling mount (coords on label)"),
+        plt.Line2D([0], [0], marker="o", linestyle="none", color="#00acc1",
+                   markeredgecolor="white", markersize=10,
+                   label="BZ water-leak sensor (floor mount)"),
     ]
     ax.legend(handles=legend_elements, loc="upper left",
               bbox_to_anchor=(0.01, 0.99), fontsize=9, framealpha=0.95)
@@ -687,8 +821,53 @@ def export_config() -> None:
                     [list(pt) for pt in PRIVACY_THERMAL_ZONES_MM[room]]
                     if room in PRIVACY_THERMAL_ZONES_MM else None
                 ),
+                "privacy_hardware_mounts_mm": (
+                    {
+                        "thermal_ceiling_mount_mm": (
+                            PRIVACY_THERMAL_CEILING_MOUNT_MM["SZ"]
+                        ),
+                        "mount_note": (
+                            "Ceiling-mounted AMG8833/MLX class grid; (x,y) is "
+                            "centroid of privacy_thermal_polygon_mm; "
+                            "z = ceiling_height_mm."
+                        ),
+                    }
+                    if room == "SZ"
+                    else {
+                        "thermal_ceiling_mount_mm": (
+                            PRIVACY_THERMAL_CEILING_MOUNT_MM["BZ"]
+                        ),
+                        "water_leak_floor_mount_mm": (
+                            BZ_WATER_LEAK_FLOOR_MOUNT_MM
+                        ),
+                        "mount_note": (
+                            "Thermal: ceiling as SZ. Water leak: floor device "
+                            "(Zigbee); adjust xy after site survey inside "
+                            "privacy_thermal_polygon_mm."
+                        ),
+                    }
+                    if room == "BZ"
+                    else None
+                ),
             }
             for room, b in ROOM_BOUNDS_MM.items()
+        },
+        "privacy_hardware_mounts_mm": {
+            "coordinate_frame": (
+                "floor-plan envelope mm: origin NW, +x east, +y south; "
+                "thermal z = ceiling; leak z = floor"
+            ),
+            "SZ": {
+                "thermal_ceiling_mount_mm":
+                    PRIVACY_THERMAL_CEILING_MOUNT_MM["SZ"],
+            },
+            "BZ": {
+                "thermal_ceiling_mount_mm":
+                    PRIVACY_THERMAL_CEILING_MOUNT_MM["BZ"],
+                "water_leak_floor_mount_mm": (
+                    BZ_WATER_LEAK_FLOOR_MOUNT_MM
+                ),
+            },
         },
         "privacy_thermal_zones_mm": {
             k: [[x, y] for x, y in poly]
