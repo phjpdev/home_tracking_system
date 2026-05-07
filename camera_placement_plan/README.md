@@ -194,7 +194,7 @@ These will be auto-derived properly by `step_pipeline/extract_floor_plan.py` (ne
 - **Smoke-test the AMG8833 thermal sensor (1 unit) before bulk-ordering.** Walk + lie-down test on a 3 m ceiling; confirm vertical-vs-horizontal blob is unambiguous in the data.
 - **`tracking_demo/`** — minimal end-to-end re-ID demo on a single camera (webcam works as a stand-in until the OEM cameras are wired up).
 - **`step_pipeline/extract_floor_plan.py`** (next round) — automated STEP → floor_plan.png + room-polygon JSON + scale.
-- **`tracking_engine/`** (next round) — full multi-camera service for the Pi 5.
+- **`tracking_engine/`** — Phase C MVP: single-camera RTSP path, YOLO + ByteTrack, dummy/homography calibration, instrumented POST ([tracking_engine/README.md](tracking_engine/README.md)). Multi-camera + OSNet + privacy comes next.
 - **`calibration_tool/`** (next round) — browser-based calibration so a non-technical installer can re-map cameras after geometry changes.
 
 ---

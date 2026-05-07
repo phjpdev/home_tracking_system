@@ -1,0 +1,37 @@
+# Phase C — single-camera MVP (see repo plan / indoor_tracking_system_breakdown).
+
+camera:
+  id: cam_kwz_sw
+  # OEM boards often look like:
+  # rtsp://admin:password@192.168.1.100:554/Streaming/Channels/101
+  rtsp_url: rtsp://127.0.0.1:8554/live
+
+calibration_file: calibration/camera_calibrations.json
+
+detector:
+  # auto → Hailo + HEF if available on Pi, else Ultralytics CPU.
+  backend: auto
+  yolo_weights: yolov8n.pt
+  hailo_hef: /usr/share/hailo-models/yolov8s_h8l.hef
+  conf: 0.4
+
+tracking:
+  zone: K/WZ
+  default_privacy: false
+
+poster:
+  url: http://127.0.0.1:8765/tracking/positions
+  timeout_sec: 3.0
+  dry_run: false
+  # For LAN-only Maro with self-signed TLS, set to false.
+  verify_tls: true
+  # When true, adds a ``latency_ms`` object to the JSON body (Maro must ignore unknown keys).
+  include_latency_in_post: false
+
+runtime:
+  show_preview: false
+  latency_log_every_n_frames: 30
+  # 0 = run until Ctrl+C
+  max_frames: 0
+  # Optional overlay window (needs a display / X11 / Wayland)
+  preview_scale: 0.5

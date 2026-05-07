@@ -1,0 +1,12 @@
+{
+  "cam_kwz_sw": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 2500,
+      "x_max": 10000,
+      "y_min": 5000,
+      "y_max": 9200
+    },
+    "_comment": "Phase C placeholder: linear map from image (u/W,v/H) to K/WZ-ish rectangle. Replace with homography from the calibration tool later."
+  }
+}
