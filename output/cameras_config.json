@@ -1,5 +1,5 @@
 {
-  "phase": "1.4-prototype-wifi",
+  "phase": "1.5-prototype-poe",
   "coordinate_system": {
     "origin": "NW corner of the floor-plan envelope (top-left)",
     "x_axis": "east (+x = right on plan)",
@@ -13,7 +13,7 @@
     "interior_bounds_mm": {
       "x_min": 1700,
       "x_max": 17900,
-      "y_min": 4500,
+      "y_min": 2500,
       "y_max": 8700
     },
     "ceiling_height_mm": 3000
@@ -32,28 +32,28 @@
       "scope_note": "full tracking",
       "trackable_polygon_mm": [
         [
-          2400,
-          8700
+          2500,
+          9200
         ],
         [
           2500,
-          4500
+          5000
         ],
         [
           10000,
-          4500
+          5000
         ],
         [
           10000,
-          6500
+          7000
         ],
         [
           6300,
-          6500
+          7000
         ],
         [
           6300,
-          8700
+          9200
         ]
       ]
     },
@@ -79,8 +79,8 @@
         4500,
         8400
       ],
-      "in_scope": false,
-      "scope_note": "no camera this round (entry/exit deferred)",
+      "in_scope": true,
+      "scope_note": "no camera (privacy room \u2014 fall detection via thermal IR sensor, see FINAL_CAMERA_SELECTION.md)",
       "trackable_polygon_mm": null
     },
     "Yoga": {
@@ -97,21 +97,65 @@
       "trackable_polygon_mm": [
         [
           14100,
-          4800
+          5300
         ],
         [
           17900,
-          4800
+          5300
         ],
         [
           17900,
-          8300
+          8800
         ],
         [
           14100,
-          8300
+          8800
         ]
       ]
+    },
+    "Hallway": {
+      "x_mm": [
+        12000,
+        17900
+      ],
+      "y_mm": [
+        2500,
+        4500
+      ],
+      "in_scope": true,
+      "scope_note": "full tracking",
+      "trackable_polygon_mm": [
+        [
+          14000,
+          8700
+        ],
+        [
+          10100,
+          8700
+        ],
+        [
+          10100,
+          8000
+        ],
+        [
+          14000,
+          8000
+        ]
+      ]
+    }
+  },
+  "privacy_room_sensors": {
+    "SZ": {
+      "type": "thermal-ir-grid",
+      "model": "Panasonic AMG8833 Grid-EYE (8x8 thermal)",
+      "purpose": "presence + fall detection (no imaging)",
+      "rationale": "client tested mmWave (Aqara FP2, Apollo R1) \u2014 both fail due to metal in walls. Thermal IR is RF-immune."
+    },
+    "BZ": {
+      "type": "thermal-ir-grid + water-leak",
+      "model": "Panasonic AMG8833 + Aqara water leak sensor",
+      "purpose": "presence + fall detection + wet-floor secondary check",
+      "rationale": "same metal-wall constraint; water sensor reduces fall false negatives."
     }
   },
   "cameras": [
@@ -121,24 +165,32 @@
       "room": "K/WZ",
       "role": "Tracking (K/WZ south-west, looks NE-ish)",
       "mount": {
-        "x_mm": 2500,
-        "y_mm": 8600,
+        "x_mm": 2600,
+        "y_mm": 9100,
         "z_mm": 3000,
         "yaw_deg": 330,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "wifi-prototype-OV2640",
-        "transport": "wifi",
-        "stream_proto": "rtsp-or-mjpeg",
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
-        "stream_resolution": [
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
           640,
           480
         ],
-        "stream_fps": 12,
-        "ir_night": false
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
       }
     },
     {
@@ -147,24 +199,32 @@
       "room": "K/WZ",
       "role": "Tracking (K/WZ north-west, looks SE-ish)",
       "mount": {
-        "x_mm": 2500,
-        "y_mm": 5200,
+        "x_mm": 2600,
+        "y_mm": 5700,
         "z_mm": 3000,
         "yaw_deg": 25,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "wifi-prototype-OV2640",
-        "transport": "wifi",
-        "stream_proto": "rtsp-or-mjpeg",
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
-        "stream_resolution": [
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
           640,
           480
         ],
-        "stream_fps": 12,
-        "ir_night": false
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
       }
     },
     {
@@ -174,23 +234,31 @@
       "role": "Tracking (K/WZ north-east on K/WZ-BZ frame, looks SW-ish into K/WZ + east into BZ/SZ strip)",
       "mount": {
         "x_mm": 6200,
-        "y_mm": 4900,
+        "y_mm": 5400,
         "z_mm": 3000,
         "yaw_deg": 155,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "wifi-prototype-OV2640",
-        "transport": "wifi",
-        "stream_proto": "rtsp-or-mjpeg",
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
-        "stream_resolution": [
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
           640,
           480
         ],
-        "stream_fps": 12,
-        "ir_night": false
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
       }
     },
     {
@@ -200,23 +268,31 @@
       "role": "Tracking (K/WZ middle-east on K/WZ-BZ frame, looks NW-ish into K/WZ + along BZ/SZ strip)",
       "mount": {
         "x_mm": 6300,
-        "y_mm": 6400,
+        "y_mm": 6900,
         "z_mm": 3000,
         "yaw_deg": 330,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "wifi-prototype-OV2640",
-        "transport": "wifi",
-        "stream_proto": "rtsp-or-mjpeg",
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
-        "stream_resolution": [
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
           640,
           480
         ],
-        "stream_fps": 12,
-        "ir_night": false
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
       }
     },
     {
@@ -226,23 +302,31 @@
       "role": "Tracking (Yoga north-east, looks SW-ish)",
       "mount": {
         "x_mm": 17800,
-        "y_mm": 4900,
+        "y_mm": 5400,
         "z_mm": 3000,
         "yaw_deg": 155,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "wifi-prototype-OV2640",
-        "transport": "wifi",
-        "stream_proto": "rtsp-or-mjpeg",
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
-        "stream_resolution": [
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
           640,
           480
         ],
-        "stream_fps": 12,
-        "ir_night": false
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
       }
     },
     {
@@ -252,23 +336,65 @@
       "role": "Tracking (Yoga south-west on SZ-Yoga frame, looks NE-ish; stereo with cam 5)",
       "mount": {
         "x_mm": 14200,
-        "y_mm": 8200,
+        "y_mm": 8700,
         "z_mm": 3000,
         "yaw_deg": 330,
         "tilt_deg": 35
       },
       "sensor": {
-        "model": "wifi-prototype-OV2640",
-        "transport": "wifi",
-        "stream_proto": "rtsp-or-mjpeg",
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
         "fov_h_deg": 66,
         "fov_v_deg": 50,
-        "stream_resolution": [
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
           640,
           480
         ],
-        "stream_fps": 12,
-        "ir_night": false
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
+      }
+    },
+    {
+      "id": 7,
+      "name": "cam_hallway_n",
+      "room": "Hallway",
+      "role": "Tracking (hallway east end, looks W along corridor)",
+      "mount": {
+        "x_mm": 14100,
+        "y_mm": 8200,
+        "z_mm": 3000,
+        "yaw_deg": 180,
+        "tilt_deg": 35
+      },
+      "sensor": {
+        "model": "oem-poe-board-h3516-imx335",
+        "transport": "ethernet-poe-802.3af",
+        "stream_proto": "rtsp",
+        "codec_main": "h.265",
+        "codec_sub": "h.264",
+        "fov_h_deg": 66,
+        "fov_v_deg": 50,
+        "stream_resolution_main": [
+          2592,
+          1944
+        ],
+        "stream_resolution_sub": [
+          640,
+          480
+        ],
+        "stream_fps_sub": 15,
+        "ir_night": true,
+        "ir_cut_filter": true,
+        "firmware_target": "OpenIPC (after smoke test)"
       }
     }
   ]

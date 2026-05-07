@@ -1,37 +1,34 @@
-# Camera Placement Plan — Phase 1.4 (WiFi prototype, 6 cameras)
+# Camera Placement Plan — Phase 1.5 (7 cameras + privacy-room thermal sensors)
 
-**Status:** Camera positions locked by client (installable mounting points). Each per-camera FOV widget is now drawn against an explicit, client-defined trackable polygon, with a fireplace optical blocker between K/WZ and SZ.
-**Hardware:** 6 x WiFi cameras already procured by the client (Amazon listing — OV2640-class, ~66 deg horizontal FOV, 640x480 stream).
-**Building envelope:** 19.8 m x 10.2 m floor-plan footprint (verified against `ZB Baugruppe TMH2.STEP`), ceiling 3.0 m. Interior rooms occupy a strip y in [4500, 8700] mm; the rest is outdoor terrace, NOT tracked.
-**Rooms in scope this round:** K/WZ (full tracking — 4 cameras), Yoga (full tracking — 2 cameras).
-**Out of scope this round:** SZ (entry/exit detection deferred — see §6), BZ (bathroom).
-
----
-
-## What changed since 1.2
-
-Three rounds of client feedback rolled into this version:
-
-1. **Wedges crossed walls (v1.2 → 1.3).** Each FOV wedge is now clipped to its own room's trackable polygon, not the whole interior strip, so a cone never bleeds into a neighbouring room.
-2. **Cam 4 too small (v1.2) and untracked north strip in K/WZ (v1.2).** The privacy door watcher is dropped this round; cam 4 becomes a 4th K/WZ tracking camera, and K/WZ goes back to full corner coverage.
-3. **Yoga cameras clashed with the SZ↔Yoga wall (v1.2).** Both Yoga cameras moved away from the SZ↔Yoga divider, never face it.
-4. **Camera positions hand-tuned by client (v1.4).** Every (x_mm, y_mm, yaw_deg) is now a real installable mount point against the actual structural frame in the building. Marked as `POSITIONS LOCKED BY CLIENT` in `generate_camera_plan.py`; do not change without sign-off.
-5. **Trackable widgets redrawn from explicit polygons, not geometric FOV cones (v1.4).** Two polygons (K/WZ L-shape, Yoga rectangle) define the *physical* outer bound of what each room's cameras can possibly see. Per-camera wedges are then clipped to that polygon.
-6. **Fireplace optical blocker (v1.4).** The K/WZ trackable polygon's eastern arm stops at the fireplace (x ≈ 10000 mm). K/WZ cameras can see *up to* the fireplace; SZ proper is dark to them.
-7. **Output PNG no longer has a side panel (v1.4).** Floor plan fills the whole image (2556 x 1396 px) so it's not cropped in narrow preview panes. The data that used to live in the side panel is now in `cameras_config.json` and this README only.
+**Status:** Camera positions locked by client (cams 1–6 from v1.4, plus a new cam 7 in the hallway behind Yoga). Production camera SKU approved (OEM PoE board). Privacy-room fall detection moved from mmWave radar to a low-resolution thermal IR sensor after on-site mmWave testing failed due to metal in the walls.
+**Camera hardware (production-locked):** OEM PoE IP camera board (HiSilicon-class SoC + Sony image sensor, 1080p+ H.264/H.265 RTSP, IRCUT, IR LEDs, M12 2.8 mm lens). 7 placements + 1 spare. See [docs/FINAL_CAMERA_SELECTION.md](docs/FINAL_CAMERA_SELECTION.md).
+**Privacy-room sensors:** Panasonic AMG8833 8×8 thermal IR grid in SZ + BZ for non-imaging fall detection (RF-immune). Aqara water-leak sensor in BZ as a secondary channel. Same FastAPI/MQTT pipeline as the cameras.
+**Building envelope:** 19.8 m × 10.2 m floor-plan footprint (verified against `ZB Baugruppe TMH2.STEP`), ceiling 3.0 m. Tracked area now includes the upper hallway behind Yoga in addition to K/WZ + Yoga.
 
 ---
 
-## 1. The 6 placements (Phase 1.4, locked)
+## What changed since 1.4
 
-| # | Name           | Position (x, y, z) mm | Yaw     | Tilt   | Role                                                       |
-|---|----------------|----------------------|---------|--------|------------------------------------------------------------|
-| 1 | `cam_kwz_sw`   | (2500, 8600, 3000)   | 330 deg | 35 deg | K/WZ tracking — south-west, looks NE-ish                   |
-| 2 | `cam_kwz_nw`   | (2500, 5200, 3000)   |  25 deg | 35 deg | K/WZ tracking — north-west, looks SE-ish                   |
-| 3 | `cam_kwz_ne`   | (6200, 4900, 3000)   | 155 deg | 35 deg | K/WZ tracking — north-east on K/WZ-BZ frame, looks SW into K/WZ + east toward fireplace |
-| 4 | `cam_kwz_se`   | (6300, 6400, 3000)   | 330 deg | 35 deg | K/WZ tracking — middle-east on K/WZ-BZ frame, looks NE toward fireplace |
-| 5 | `cam_yoga_ne`  | (17800, 4900, 3000)  | 155 deg | 35 deg | Yoga tracking — north-east, looks SW across Yoga           |
-| 6 | `cam_yoga_se`  | (14200, 8200, 3000)  | 330 deg | 35 deg | Yoga tracking — south on SZ-Yoga frame, looks NE; stereo with #5 |
+1. **+1 camera in the hallway behind Yoga (cam 7).** Client requirement: re-ID continuity must extend into the corridor connecting Yoga to the rest of the home, not stop at Yoga's east wall.
+2. **Production camera SKU approved.** Going with the AliExpress OEM PoE camera board (≈ EUR 36 / unit) over the EUR 65–220 finished consumer cameras. The placement script is camera-model-agnostic so the geometry is unchanged; only the `sensor` block in `cameras_config.json` is updated.
+3. **Fall detection in privacy rooms switched from mmWave radar → thermal IR grid.** Client tested Aqara FP2 and Apollo R1 on site; both failed. Cause: the building has metal in the walls (frame structure + glazing mullions) which scatters 24/60 GHz radar so badly the sensors are unusable. Replacement is a Panasonic AMG8833 (Grid-EYE) 8×8 thermal sensor: optical, not RF, so metal walls don't matter; 64-pixel resolution means there's nothing identifiable in the data. Detail in [docs/FINAL_CAMERA_SELECTION.md §2](docs/FINAL_CAMERA_SELECTION.md).
+4. **`Hallway` added to `ROOM_BOUNDS_MM` and `TRACKABLE_AREAS_MM`.** Coordinates are a placeholder until the client confirms the hallway's exact extents on the floor plan.
+
+---
+
+## 1. The 7 placements (Phase 1.5, locked except cam 7)
+
+| # | Name             | Position (x, y, z) mm | Yaw     | Tilt   | Role                                                       |
+|---|------------------|----------------------|---------|--------|------------------------------------------------------------|
+| 1 | `cam_kwz_sw`     | (2500, 8600, 3000)   | 330 deg | 35 deg | K/WZ tracking — south-west, looks NE-ish                   |
+| 2 | `cam_kwz_nw`     | (2500, 5200, 3000)   |  25 deg | 35 deg | K/WZ tracking — north-west, looks SE-ish                   |
+| 3 | `cam_kwz_ne`     | (6200, 4900, 3000)   | 155 deg | 35 deg | K/WZ tracking — north-east on K/WZ-BZ frame, looks SW into K/WZ + east toward fireplace |
+| 4 | `cam_kwz_se`     | (6300, 6400, 3000)   | 330 deg | 35 deg | K/WZ tracking — middle-east on K/WZ-BZ frame, looks NE toward fireplace |
+| 5 | `cam_yoga_ne`    | (17800, 4900, 3000)  | 155 deg | 35 deg | Yoga tracking — north-east, looks SW across Yoga           |
+| 6 | `cam_yoga_se`    | (14200, 8200, 3000)  | 330 deg | 35 deg | Yoga tracking — south on SZ-Yoga frame, looks NE; stereo with #5 |
+| 7 | `cam_hallway_n`  | (17800, 3500, 3000)  | 180 deg | 35 deg | **Hallway tracking — east end of corridor behind Yoga, looks W along the long axis (PLACEHOLDER position; confirm with client)** |
+
+Cams 1–6 are unchanged from Phase 1.4 (positions hand-tuned by the client against the actual structural frames). Cam 7 is **a placeholder** — the position above places it at the east end of the corridor on the structural frame between Yoga and the building's east wall. If the actual frame is somewhere else, only the `(x_mm, y_mm, yaw_deg)` for cam 7 needs to change; everything else regenerates from that.
 
 Visualised in [output/camera_placement_plan.png](output/camera_placement_plan.png), exported as machine-readable [output/cameras_config.json](output/cameras_config.json).
 
@@ -60,7 +57,7 @@ Visualised in [output/camera_placement_plan.png](output/camera_placement_plan.pn
 
 ## 2. Trackable area widgets
 
-Each room has an explicit polygon describing what its cameras can physically see. The polygons are defined in `TRACKABLE_AREAS_MM` near the top of [generate_camera_plan.py](generate_camera_plan.py); per-camera FOV wedges are clipped to them so:
+Each tracked area has an explicit polygon describing what its cameras can physically see. The polygons are defined in `TRACKABLE_AREAS_MM` near the top of [generate_camera_plan.py](generate_camera_plan.py); per-camera FOV wedges are clipped to them so:
 - **outside the polygon** → nothing is drawn (and the runtime engine drops detections that fall outside)
 - **inside the polygon** → each camera's wedge fan extends as far as its angular FOV permits, against the polygon edge
 
@@ -81,38 +78,47 @@ Each room has an explicit polygon describing what its cameras can physically see
 (14100, 4800) → (17900, 4800) → (17900, 8300) → (14100, 8300)
 ```
 
-- Slightly inset from the room walls so the polygon represents physically reachable floor (people don't actually stand pressed against a wall).
-- Cam 5 sits at the NE corner and fans SW; cam 6 sits at the south-on-SZ-Yoga-frame and fans NE — together they cover the rectangle stereoscopically.
+- Slightly inset from the room walls so the polygon represents physically reachable floor.
+- Cam 5 sits at the NE corner and fans SW; cam 6 sits at the south on the SZ-Yoga frame and fans NE — together they cover the rectangle stereoscopically.
+
+### Hallway (behind Yoga) trackable area — rectangle, single-camera coverage
+
+```
+(12000, 2500) → (17900, 2500) → (17900, 4500) → (12000, 4500)
+```
+
+- ~5.7 m long (E–W) × ~2 m deep (N–S). Cam 7 at the east end fans west along the long axis; the polygon clip keeps the wedge inside the corridor.
+- **Coordinates are a placeholder.** Verify against the floor plan: the corridor I'm assuming runs north of Yoga's north wall in the upper interior strip. If "the hallway behind Yoga" actually means the strip east of Yoga (between Yoga and the east end of the building) or somewhere else, edit the four coordinates above and the cam-7 position together.
 
 ---
 
 ## 3. Why this layout
 
-**K/WZ — 4 cameras**
+**K/WZ — 4 cameras, Yoga — 2 cameras** — unchanged from Phase 1.4. Reasoning is the same: K/WZ corner-to-corner stereo coverage, Yoga east-side cameras that physically face away from the SZ↔Yoga wall, all wedges clipped to their polygons.
 
-K/WZ is 5.0 m wide x 3.9 m deep. The 4 cameras are split across the SW + NW corners and along the K/WZ-BZ shared frame:
-- 2-camera coverage of every point in the K/WZ rectangle (re-ID handover always possible).
-- The previously-missed N strip is now covered by cams 2 + 3 (they sit on / near the N wall).
-- Cams 3 + 4 (mounted on the BZ-side structural frame, the only solid wall in that area) extend coverage east into the upper BZ strip up to the fireplace, so the kitchen-island side is well covered.
+**Hallway — 1 camera (new in 1.5)**
 
-**Yoga — 2 cameras**
-
-Yoga is 5.7 m wide x 3.9 m deep. Mounting both cameras on the east side / SZ-Yoga frame and aiming them diagonally back gives:
-- Stereo coverage of the centre and east half of Yoga (the actual usable space).
-- Wedges that physically face *away* from the SZ↔Yoga wall, so they never look through it.
-- With per-room polygon clipping, the cones are bounded by Yoga's rectangle. They cannot visually intrude on SZ even if their geometric extent would.
+The corridor behind Yoga is long and narrow (≈ 5.7 m × 2 m), so a single wide-FOV camera at one end works better than two opposing cameras would. Mounting at the east end of the corridor and aiming west:
+- The 66° angular FOV opens up across the corridor's entire length.
+- The wedge fan beyond ~3 m exceeds the corridor's 2 m depth — the polygon clip discards the parts that fall outside the corridor walls.
+- Re-ID handover with cams 5/6 (Yoga) is at the corridor's south wall, where everyone enters/leaves.
 
 **Mounting points**
 
-The long N + S walls of the building are continuous sliding glass. The only solid wall fixing point on the room perimeter is the **structural steel frame between glass panels at every interior corner / room divider**. All 6 cameras mount on a ceiling drop bracket bolted to one of those frames. The exact (x_mm, y_mm) coordinates above are picked to land on those specific frames.
+The long N + S walls of the building are continuous sliding glass. The only solid wall fixing point on the room perimeter is the **structural steel frame between glass panels at every interior corner / room divider**. All 7 cameras mount on a ceiling drop bracket bolted to one of those frames.
 
-### Why no SZ camera this round
+### Privacy rooms — no cameras, thermal sensors instead
 
-The two ways to do SZ in this prototype were:
-- A near-top-down door watcher (v1.2's `cam_sz_door`, tilt 80°). Client said: too small an area.
-- A regular tracking camera in SZ. Conflicts with the privacy requirement (no per-person coords inside the bedroom).
+SZ + BZ stay camera-free (privacy hard requirement). Fall detection there now uses a low-resolution thermal IR grid:
 
-Rather than ship a half-broken SZ solution, it's deferred. SZ entrance/exit detection is added back as soon as we agree on the approach — see §6 for the candidate replacements.
+| Sensor                             | Where  | Why                                                  |
+|------------------------------------|--------|------------------------------------------------------|
+| Panasonic AMG8833 (Grid-EYE) 8×8   | SZ, BZ | Non-imaging fall detection (heat blob, not picture)  |
+| Aqara water-leak sensor (Zigbee)   | BZ     | Secondary channel (fall in shower → wet-floor event) |
+
+The Grid-EYE outputs an 8×8 grid of temperatures — not an image, just 64 temperature readings per frame. There's nothing identifiable in the data (no faces, no clothing, no posture beyond "blob is vertical" vs "blob is horizontal and on the floor"). It's RF-immune, so the metal-in-walls problem that broke Aqara FP2 and Apollo R1 doesn't apply. ESPHome supports the chipset natively, and events flow through the same FastAPI server as the camera detections.
+
+Detail (smoke test, fall classification logic, full BoM): [docs/FINAL_CAMERA_SELECTION.md §2](docs/FINAL_CAMERA_SELECTION.md).
 
 ---
 
@@ -125,52 +131,54 @@ python generate_camera_plan.py
 
 Outputs (to `output/`):
 - `camera_placement_plan.png` — the visual the client signs off on (full-width floor plan, no side panel).
-- `cameras_config.json` — machine-readable camera config the tracking engine reads at startup. Includes per-room `trackable_polygon_mm` so the runtime engine can drop detections that fall outside it.
+- `cameras_config.json` — machine-readable camera config the tracking engine reads at startup. Includes per-room `trackable_polygon_mm` and `privacy_room_sensors` so the runtime engine knows which rooms are camera-tracked vs sensor-tracked.
 
 To change anything, edit the corresponding constant near the top of [generate_camera_plan.py](generate_camera_plan.py) and re-run. PNG and JSON regenerate together so they cannot drift apart.
 
-| Want to change…                              | Edit…                                       |
-|----------------------------------------------|---------------------------------------------|
-| A camera's mount point or look direction     | `CAMERAS` list (`x_mm`, `y_mm`, `yaw_deg`)  |
-| The K/WZ or Yoga trackable polygon shape     | `TRACKABLE_AREAS_MM`                        |
-| Where the fireplace blocks K/WZ → SZ view    | `FIREPLACE_X_MM` (single int)               |
-| The interior strip envelope                  | `INTERIOR_X_MIN_MM` / `..._MAX_MM` etc.     |
+| Want to change…                                  | Edit…                                       |
+|--------------------------------------------------|---------------------------------------------|
+| A camera's mount point or look direction         | `CAMERAS` list (`x_mm`, `y_mm`, `yaw_deg`)  |
+| The K/WZ, Yoga, or Hallway trackable polygon     | `TRACKABLE_AREAS_MM`                        |
+| Where the fireplace blocks K/WZ → SZ view        | `FIREPLACE_X_MM` (single int)               |
+| The interior strip envelope                      | `INTERIOR_X_MIN_MM` / `..._MAX_MM` etc.     |
+| Privacy-room sensor model / wiring               | `privacy_room_sensors` block in `export_config()` |
 
 ---
 
 ## 5. What still needs precision from the STEP file
 
-The STEP file (`ZB Baugruppe TMH2.STEP`, SolidWorks 2019, AP203) confirms the 19.8 x 10.2 m envelope but is too noisy to extract exact wall geometry with simple regex (CARTESIAN_POINTs include construction geometry, normals and reference points outside the building). These values are still visual estimates and will be auto-derived properly by `step_pipeline/extract_floor_plan.py` (next phase, uses `cadquery` / `pythonocc` to walk the B-Rep):
+Same list as Phase 1.4, now with one extra item:
 
 1. **Exact pixel-to-mm scale for the rendered floor plan image.** Currently calibrated visually against `floor_plan.png`.
-2. **Exact interior wall and structural-frame positions.** Today, the 6 camera mount points and both polygons are placed by eye against `floor_plan.png`. If the structural frames are offset from the visual estimate by a few hundred mm, each `(x_mm, y_mm)` can be shifted by that amount; nothing else changes.
-3. **Fireplace east-face x.** `FIREPLACE_X_MM = 10000` is a visual estimate; the STEP geometry should give us this within a millimetre.
+2. **Exact interior wall and structural-frame positions.** The 7 camera mount points and three polygons are still placed by eye against `floor_plan.png`.
+3. **Fireplace east-face x.** `FIREPLACE_X_MM = 10000` is a visual estimate.
+4. **Exact hallway extents.** The corridor polygon `(12000, 2500) → (17900, 2500) → (17900, 4500) → (12000, 4500)` and cam 7's mount position both need verification against the actual layout.
 
-Until that automation is in place, the Phase 1.4 placements are good enough to physically install the cameras and start testing.
+These will be auto-derived properly by `step_pipeline/extract_floor_plan.py` (next phase, uses `cadquery` / `pythonocc` to walk the B-Rep). Until then, Phase 1.5 is good enough to physically install the cameras and start testing.
 
 ---
 
 ## 6. Open items / Next deliverables
 
-- **SZ entrance/exit detection.** Three options on the table:
-   - **(a)** Add a 7th camera at the K/WZ↔SZ doorway (corridor between K/WZ and SZ along the north of the BZ block), tilt ~70°, framed only on the threshold so it cannot see the bed.
-   - **(b)** Magnetic door sensor (~€5) on the SZ door + the existing K/WZ cameras to infer "person crossed into SZ". Cheapest, no extra camera, but only event-based, no continuous presence.
-   - **(c)** mmWave radar (~€30, e.g. Seeed XIAO ESP32C6 + LD2410) for presence-only inside SZ. No image data ever leaves the bedroom — ideal for the privacy story.
-   
-   Recommendation: (b) for now (cheapest, ships fastest) and (c) as a phase-2 upgrade. Awaiting client decision.
-- **`tracking_demo/`** — minimal end-to-end re-ID demo on a single camera (webcam works as a stand-in until the WiFi cameras are wired up). Lets the client *see* the tracking concept without waiting for the full system.
-- **`docs/FINAL_CAMERA_SELECTION.md`** — the production PoE camera recommendation: small, cheap, IR-night, 24/7-streaming-reliable.
-- **`step_pipeline/extract_floor_plan.py`** (next round) — automated STEP → floor_plan.png + room-polygon JSON + scale, so any geometry change rebuilds the placement plan in one command.
+- **Cam 7 / hallway polygon — confirm with client.** Position is a placeholder. Once the client points to the actual structural frame in the corridor, update the four hallway-polygon vertices + cam 7's `(x_mm, y_mm, yaw_deg)` and re-run the script.
+- **SZ entrance/exit detection.** Now folded into the AMG8833 thermal sensor in SZ — the heat blob entering the room *is* the entry event. No magnetic door sensor needed. (The mmWave-radar option from Phase 1.4 §6 is dropped on grounds of empirical failure.)
+- **Smoke-test the OEM PoE camera (1 unit) before bulk-ordering.** Spec for the smoke test in [docs/FINAL_CAMERA_SELECTION.md §3](docs/FINAL_CAMERA_SELECTION.md).
+- **Smoke-test the AMG8833 thermal sensor (1 unit) before bulk-ordering.** Walk + lie-down test on a 3 m ceiling; confirm vertical-vs-horizontal blob is unambiguous in the data.
+- **`tracking_demo/`** — minimal end-to-end re-ID demo on a single camera (webcam works as a stand-in until the OEM cameras are wired up).
+- **`step_pipeline/extract_floor_plan.py`** (next round) — automated STEP → floor_plan.png + room-polygon JSON + scale.
 - **`tracking_engine/`** (next round) — full multi-camera service for the Pi 5.
 - **`calibration_tool/`** (next round) — browser-based calibration so a non-technical installer can re-map cameras after geometry changes.
 
 ---
 
-## 7. Risks (carried forward)
+## 7. Risks (carried forward + new)
 
-- **R1 — Lens FOV may be 66 / 120 / 160 deg.** Verify with one camera before installing all six (point at a wall 1 m away, measure the visible width). If the actual horizontal FOV differs, update `fov_h_deg` in `CAMERAS`; the polygon clipping ensures the rendered widget still respects the bound regardless.
-- **R2 — WiFi reliability.** Dedicated 2.4 GHz SSID for cameras only; static IPs by MAC; powered from wall sockets, not USB hubs.
-- **R3 — No IR night vision.** These prototype cameras are RGB only. The production system requires PoE cameras with built-in IR for "music follows me at night" to work. See [docs/FINAL_CAMERA_SELECTION.md](docs/FINAL_CAMERA_SELECTION.md) for the recommended replacement model.
-- **R4 — ~10-15 fps over WiFi, not 30.** Tracking engine is being built to tolerate 8-10 fps with motion-prediction recovery between frames.
+- **R1 — Lens FOV may be 66 / 90 / 120 deg.** Verify with one camera before installing all seven (point at a wall 1 m away, measure the visible width). The OEM 2.8 mm M12 lens is closer to 90° than 66°, but the polygon clipping ensures the rendered widget still respects the bound regardless of the actual figure. Update `fov_h_deg` in `CAMERAS` once measured.
+- **R2 — Stock OEM firmware phones home.** Mitigated by (a) VLAN with no internet route for cameras + Pi 5, (b) reflashing all 8 boards to OpenIPC after the smoke test passes. See [docs/FINAL_CAMERA_SELECTION.md §1](docs/FINAL_CAMERA_SELECTION.md).
+- **R3 — IR LED ring may not have enough range for K/WZ + Yoga.** The OEM boards typically ship with ~5 m range IR LEDs. K/WZ and Yoga are both ≤ 5.7 m on their long axis, so this should be fine, but verify in the smoke test under the client's actual lighting.
+- **R4 — ~12-15 fps over PoE.** Tracking engine is being built to tolerate 8-10 fps with motion-prediction recovery between frames, so the actual PoE capacity (typically 25-30 fps for 1080p H.264) is well above the requirement.
 - **R5 — Glass walls cause re-ID ghosts.** Detections falling outside the trackable polygon are dropped before they hit the global ID manager.
-- **R6 — Fireplace x is an estimate.** `FIREPLACE_X_MM` is currently 10000 mm by visual inspection; if the real value is materially different the K/WZ polygon will need its arm extended or shortened. One-line change.
+- **R6 — Fireplace x is an estimate.** `FIREPLACE_X_MM` is currently 10000 mm by visual inspection.
+- **R7 — Hallway camera position is a placeholder.** Cam 7's `(x_mm, y_mm, yaw_deg)` and the hallway polygon are guesses. Will be locked once the client confirms the actual structural mounting point and corridor extents.
+- **R8 — AMG8833 8×8 might be too coarse for posture classification.** Backup plan is to upgrade to MLX90640 (32×24 thermal) in SZ + BZ at ~ EUR 60 / sensor instead of EUR 25. Decide after the smoke test.
+- **R9 — Metal in walls confirmed (not just suspected).** mmWave radar is empirically out as a fallback. If a future requirement needs through-wall presence detection, the only realistic remaining options are PIR sensors (rough) or pressure mats (intrusive); not radar.

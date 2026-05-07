@@ -1,148 +1,209 @@
-# Final Camera Selection — Production Hardware Recommendation
+# Final Hardware Selection — Production Cameras + Privacy-Room Sensors
 
-**Why this doc exists:** the prototype phase (currently 1.4, see top-level
-[README.md](../README.md)) uses 6 WiFi cameras the client already ordered.
-They have **no IR night vision** and WiFi is known flaky. The production
-system needs cameras that satisfy the full job spec — "PoE, RGB day + IR
-night, 24/7, cheap, small enough to hide".
+This doc is the definitive buy list for the production deployment.
+Phase: 1.5 (7 cameras + non-camera fall-detection sensors in SZ + BZ).
 
-This doc is the buy-list for that production hardware. It is meant to be
-read AFTER the WiFi prototype is up and re-ID is validated end-to-end —
-i.e. the camera selection only matters once we know the *software* works.
+For the camera placement geometry, see `generate_camera_plan.py`
+and `output/cameras_config.json`. For the system overview, see the
+top-level [README.md](../README.md).
 
-The 6 prototype mount points are the same physical positions the
-production cameras will use; only the camera bodies are swapped. So the
-production order should be **6 cameras for the locked positions + 1-2
-spares** (see §"Supporting hardware to buy" below).
+---
 
-## Hard requirements (from the spec)
+## 1. Camera selection — APPROVED
 
-1. **PoE 802.3af** powered (single Ethernet cable per camera, no separate PSU)
-2. **RTSP H.264 stream** (Pi 5 has hardware H.264 decode; H.265 also works
-   but uses slightly more CPU on Pi)
-3. **RGB day + IR night** with mechanical IR-cut filter (true night vision,
-   not just low-light)
-4. **24/7 streaming reliable** — runs for months without crashing
-5. **Hideable in a 3 m ceiling** — small footprint, ideally dome or
-   pinhole form factor
-6. **Cheap-ish** — sub-EUR 100 per camera (target sub-EUR 70)
-7. **Local-only operation** — no mandatory cloud account, no firmware
-   that phones home
+**Status:** approved by client. Order placed.
 
-## Soft requirements (nice-to-have)
+### What was approved
 
-- ONVIF Profile S (so the calibration tool can auto-discover cameras)
-- Dual-stream output (main + sub) so the tracking engine can pull a
-  low-res sub-stream and save bandwidth + decode CPU
-- Built-in motion detection / person detection as fallback
-- WDR / HDR for the K/WZ cameras (sliding glass doors create
-  high-contrast scenes the standard sensor blows out)
+| Item                | Detail                                                                |
+|---------------------|-----------------------------------------------------------------------|
+| Type                | OEM "DIY IP/PoE Camera Module Board"                                  |
+| Source              | AliExpress (seller "Shop1318225 Store") — ship-from-EU option         |
+| SoC                 | HiSilicon Hi3516-class                                                |
+| Sensor              | Sony IMX335 (or 1/2.7" equivalent)                                    |
+| Resolution          | up to 5 MP (we run 1080p sub-stream for tracking)                     |
+| Codec               | H.264 main + H.265 main, dual-stream                                  |
+| Lens                | M12 2.8 mm fixed (≈ 90° H-FOV) — matches the 66° figure used in the   |
+|                     | placement script with margin for cropping                             |
+| IR                  | Built-in IR LED ring + mechanical IRCUT filter (true day/night)       |
+| PoE                 | 802.3af on board (no separate splitter needed) — `5MP POE (48V)` SKU  |
+| Protocol            | ONVIF + native RTSP (`/stream0`, `/stream1`)                          |
+| Form factor         | Bare PCB ~38 × 38 mm + lens — small enough to recess into a ceiling   |
+|                     | frame so only the lens objective is visible from the room             |
+| Unit price          | ~ EUR 36 / board (includes RJ45 PoE pigtail)                          |
+| Quantity            | **8 units** = 7 placements (cams 1–7) + 1 spare                       |
 
-## Top recommendation: Reolink RLC-520A (4 MP PoE Dome)
+### Why this and not a finished consumer camera
 
-- **Price:** ~EUR 65 / camera in DE (Reolink direct or Amazon)
-- **Form factor:** 95 mm dome, ceiling-mountable, recessed look
-- **Sensor:** 4 MP, 1/3" CMOS, 80 deg horizontal FOV
-- **Stream:** RTSP H.264 / H.265, dual-stream
-  - Main: 2560x1440 @ up to 25 fps
-  - Sub: 640x480 @ up to 15 fps (the one we actually use)
-- **IR:** 18 IR LEDs, ~30 m range (overkill, but cuts in/out cleanly)
-- **PoE:** 802.3af, ~5 W
-- **Codec note:** firmware 3.1+ has H.265 main + H.264 sub, which is the
-  best combo: H.264 sub for tracking (cheap to decode), H.265 main for
-  optional recording (smaller files)
-- **Local-only:** Reolink works without an account; the cloud features
-  are opt-in. The web UI has a "disable Reolink Cloud" toggle that we
-  flip during install.
-- **RTSP URL pattern:**
-  ```
-  rtsp://admin:PASSWORD@<ip>:554/h264Preview_01_sub   # tracking
-  rtsp://admin:PASSWORD@<ip>:554/h264Preview_01_main  # recording
-  ```
-- **Why this over the bullet RLC-510A:** the dome is 95 mm vs. the
-  bullet's 165 mm. Same internals, less visual clutter on the ceiling.
+The client specifically rejected the EUR 65–220 finished-camera options
+(Reolink RLC-520A, Hikvision ColorVu, Axis P1245) on cost grounds and
+asked for an OEM board he could embed himself. The boards above hit
+every hard requirement (PoE, RTSP, RGB+IR with mechanical IRCUT,
+1080p+, no cloud) at ~ EUR 36 / unit including shipping.
 
-## Backup option: Hikvision DS-2CD1143G2-I (4 MP PoE Dome)
+The trade-off is no manufacturer warranty and Chinese stock firmware
+that wants to phone home. Both are addressed below.
 
-- **Price:** ~EUR 90 / camera in DE
-- Same form factor, same FOV
-- Better build quality (Hikvision OEM)
-- True ONVIF Profile S support out of the box (Reolink's ONVIF is buggy
-  in some firmware versions; we work around with raw RTSP URLs)
-- Recommended if Reolink turns out unreliable in field testing
+### Stock-firmware risk → OpenIPC migration
 
-## Maximum-hide option: pinhole "covert" PoE camera
+These OEM boards ship with a generic Chinese firmware that:
 
-If the client wants the cameras *invisible* (no visible dome at all):
+- Has well-documented hard-coded outbound URLs (cloud, telemetry).
+- Sometimes embeds a Telnet root account with a default password.
+- Drifts in behaviour between batches.
 
-- **Hikvision DS-2CD2D14WD** — 30 mm pinhole, mounts through a
-  small hole in the ceiling, only the lens is visible (~5 mm)
-- **Price:** ~EUR 110-130
-- **Caveat:** these typically don't have IR (the lens is too small),
-  so they only work in a lit room. For night-vision rooms (bedroom door
-  watcher) we still need a regular camera.
+**Mitigation, in order:**
 
-## What NOT to buy
+1. **Network-level isolation first.** All cameras + the Pi 5 sit on a
+   separate VLAN with no internet route. Block outbound at the router.
+   The cameras *cannot* phone home even if the firmware tries.
+2. **OpenIPC firmware second.** Once the smoke test passes (see §3),
+   reflash all 8 boards to OpenIPC ([openipc.org](https://openipc.org)).
+   OpenIPC is open source, supports the Hi3516 SoC + IMX335 sensor
+   combo natively, and gives us:
+   - Reproducible firmware across all 8 cameras
+   - Native ONVIF + RTSP, no telemetry
+   - SSH instead of Telnet
+   - Reliable 24/7 streaming (its main use case is exactly this)
+3. **One model, one batch, one supplier.** Mixed firmwares = endless
+   per-camera quirks in the tracking engine. Same SKU, same lens,
+   same shipment.
 
-- **Tapo / TP-Link cloud cameras** — require a cloud account, hard to
-  disable, RTSP support is firmware-version-dependent. Avoid.
-- **Ring / Nest / Arlo** — fully cloud-locked. Out of scope for an
-  offline system.
-- **ESP32-CAM-MB with PoE shield** — DIY route. The PoE shields exist,
-  but you end up with a kludge that has the same WiFi-firmware
-  reliability issues as the standalone ESP32-CAM, plus a fragile
-  shield connector. Not worth saving EUR 40 / camera.
-- **Anything 8 MP / 4K** — Pi 5 H.264 decode is plenty for 6 streams
-  at 1080p; 4K just doubles the decode cost for no tracking benefit
-  (the YOLO model crops to 640x384 anyway).
+### RTSP URL pattern (post-flash)
 
-## Supporting hardware to buy alongside the cameras
+After OpenIPC, every camera exposes:
 
-| Item                                            | Qty | Approx EUR / unit  |
-|-------------------------------------------------|-----|--------------------|
-| Reolink RLC-520A (camera)                       | 8   | 65                 |
-| TP-Link TL-SG108PE (8-port PoE+ managed switch) | 1   | 60                 |
-| Cat6 cable, 305 m / 1000 ft box                 | 1   | 70                 |
-| RJ45 ends + crimping tool (if not already)      | 1   | 25                 |
-| Pi 5 8 GB                                       | 1   | 80                 |
-| Hailo-8L M.2 HAT                                | 1   | 70                 |
-| Active SSD (storage for recordings, optional)   | 1   | 30                 |
-|                                                 |     | **~EUR 800 total** |
+```
+rtsp://<ip>:554/stream0   # main, 1080p H.264 — optional recording
+rtsp://<ip>:554/stream1   # sub,   640x480 H.264 @ 15 fps — tracking
+```
 
-(Quantity of cameras = 8 = 6 production replacements for the locked
-prototype positions + 2 spares for either the deferred SZ entry/exit
-camera (see top-level README §6) or future Phase 2 additions like deck
-tracking.)
+`cameras_config.json` will be regenerated with each unit's IP when
+the calibration tool walks the network.
 
-## Rough decision flow for ordering
+---
 
-1. **Wait until the prototype works.** No camera order until the WiFi
-   prototype proves the tracking + re-ID logic is solid. We do not want
-   to buy 8 production cameras and discover the latency budget is wrong.
-2. Once the prototype works, **buy 1 RLC-520A first.** Validate:
-   - Does it stream stably to the Pi for 48 h without dropping?
-   - Can we decode 1 main + 1 sub stream with the Pi 5 H.264 hw decoder?
-   - Does the IR cut-in/out under our actual lighting conditions?
-3. Only after that smoke-test, **buy the remaining 7 + the switch + cable**.
-4. **Do NOT mix camera models.** Pick one model, buy all of one batch
-   from the same supplier. Mixed models = mixed firmwares = endless
-   per-camera quirks in the tracking engine.
+## 2. Privacy-room sensors (SZ + BZ) — fall detection
 
-## Power & cabling check (for 30-35 m runs the client mentioned)
+The privacy rooms cannot have a camera at all. The original plan was
+24/60 GHz mmWave radar (Aqara FP2, Apollo R1). **The client tested
+both on site and both failed.** Cause: the building has metal in the
+walls (frame structure + aluminium glass mullions), which is exactly
+the failure mode mmWave is most sensitive to — multipath reflections
+scramble the radar return.
 
-- 802.3af spec: 100 m max cable run, ~12.95 W deliverable at far end.
-- The RLC-520A draws ~5 W. Plenty of headroom on a 35 m run.
-- **No PoE extender / amplifier needed** for these distances. Only
-  if a single run goes >100 m would we add an inline PoE injector.
-- Cat6 (not Cat5e) — small price difference, more headroom for the
-  occasional 4K stream if we ever need it.
+### Replacement: low-resolution thermal IR sensor
 
-## Privacy / firewall notes
+**Why this works where mmWave doesn't:**
 
-- Cameras and Pi 5 should be on a **separate VLAN with no internet
-  access**. Block outbound traffic at the router so the cameras
-  cannot phone home to Reolink even if a future firmware tries to.
+| Property                  | mmWave (24/60 GHz) | Low-res thermal IR |
+|---------------------------|--------------------|--------------------|
+| Affected by metal walls   | Yes (severely)     | No (it's optical)  |
+| Privacy concerns          | None (no image)    | None (8×8 pixels — no facial features, no clothing detail) |
+| Detects fall posture      | Indirect (motion)  | Direct (heat blob is horizontal vs. vertical) |
+| Works in total darkness   | Yes                | Yes (it sees heat, not light) |
+| Through-blanket detection | Yes                | Partial (warmer head/limb spots stay visible) |
+| Off-the-shelf cost        | ~ EUR 70           | ~ EUR 30           |
+| ESPHome / open-source     | Limited            | Native support     |
+
+### What was approved
+
+| Room | Sensor                                                  | Approx EUR | Purpose                                    |
+|------|---------------------------------------------------------|-----------:|--------------------------------------------|
+| SZ   | Panasonic AMG8833 (Grid-EYE) 8×8 thermal + ESP32        |        25  | Presence + fall posture                    |
+| BZ   | Panasonic AMG8833 + ESP32                               |        25  | Presence + fall posture                    |
+| BZ   | Aqara water-leak sensor (Zigbee)                        |        15  | Wet-floor secondary check (fall after slip)|
+
+`MLX90640` (32×24 thermal) is a higher-resolution alternative at
+~ EUR 60–80 if 8×8 turns out too coarse for posture classification.
+Recommend starting with AMG8833 and upgrading only if needed.
+
+### How the thermal sensor classifies a fall
+
+Each frame from the Grid-EYE is an 8×8 grid of temperatures. We:
+
+1. Subtract a rolling background to get the heat blob.
+2. Fit an ellipse to the blob; compute the long-axis angle.
+3. Vertical ellipse + above-floor centroid = standing / sitting / lying-in-bed.
+4. Horizontal ellipse + on-floor centroid + still for > 10 s = **FALL EVENT**.
+
+For SZ this is enough to flag a fall when the person is not in the bed
+zone. For BZ the water-leak sensor adds a second confirmation channel:
+a fall in the shower triggers thermal-on-floor *and* water-on-floor.
+
+### Pipeline integration
+
+- Thermal sensors run ESPHome → MQTT → same FastAPI server as the cameras.
+- API contract: `POST /events` with `{ "type": "fall", "room": "SZ" / "BZ", "ts": ... }`
+- Latency budget: `< 1 s` from fall to API call (much looser than the
+  150 ms the cameras hit, because falls don't move).
+
+---
+
+## 3. Smoke test (before bulk ordering)
+
+Same plan as before, just updated for the actual SKU:
+
+1. Buy **1 OEM PoE camera board** + **1 AMG8833 + ESP32 dev kit**.
+2. Camera: connect to the Pi 5 over PoE, confirm:
+   - 1080p H.264 sub-stream at 15 fps decodes on the Pi 5 hw decoder
+   - IR cut-in / cut-out behaves cleanly under client's actual lighting
+   - 48 h continuous stream with no drop
+   - Stock firmware survives until OpenIPC flash; OpenIPC flash succeeds
+3. Thermal: place sensor on a 3 m ceiling, walk + lie-down test:
+   - Standing person reads as a vertical blob centred ~50 cm below ceiling
+   - Lying-on-floor reads as a horizontal blob centred ~250 cm below ceiling
+   - Posture flip from vertical → horizontal is unambiguous in the data
+4. **Only after both smoke tests pass**, bulk-order: 7 more camera boards
+   + 1 more thermal sensor + spares + the switch + cabling below.
+
+---
+
+## 4. Supporting hardware to buy alongside
+
+| Item                                              | Qty | Approx EUR / unit | Approx total |
+|---------------------------------------------------|----:|------------------:|-------------:|
+| OEM PoE camera board (5 MP, 2.8 mm M12, IRCUT)    |   8 |               36  |        ~290  |
+| 3D-printed / off-the-shelf hide-frames for cams   |   8 |                5  |         ~40  |
+| Panasonic AMG8833 (Grid-EYE) 8×8 thermal          |   2 |               25  |         ~50  |
+| ESP32 dev board (for AMG8833 host)                |   2 |                8  |         ~16  |
+| Aqara water-leak sensor (BZ)                      |   1 |               15  |         ~15  |
+| TP-Link TL-SG108PE (8-port PoE+ managed switch)   |   1 |               60  |         ~60  |
+| Cat6 cable, 305 m / 1000 ft box                   |   1 |               70  |         ~70  |
+| RJ45 ends + crimping tool                         |   1 |               25  |         ~25  |
+| Pi 5 8 GB                                         |   1 |               80  |         ~80  |
+| Hailo-8L M.2 HAT                                  |   1 |               70  |         ~70  |
+| Active SSD (recordings, optional)                 |   1 |               30  |         ~30  |
+|                                                   |     |                   | **~ EUR 750**|
+
+`8 cameras = 7 placements (cams 1–7) + 1 spare`.
+
+---
+
+## 5. What NOT to buy
+
+- **Aqara FP2, Apollo R1, any 24/60 GHz mmWave sensor** — empirically
+  fail in this building due to metal-wall multipath. Don't re-test.
+- **Tapo / TP-Link cloud cameras** — require a cloud account, RTSP
+  support is firmware-version-dependent.
+- **Ring / Nest / Arlo** — fully cloud-locked. Out of scope.
+- **ESP32-CAM with PoE shield** — same reliability issues as the
+  current WiFi prototypes, plus a fragile shield connector.
+- **8 MP / 4K cameras** — the Pi 5 / Hailo-8L pipeline is sized for
+  1080p decode; 4K doubles decode cost for no tracking benefit.
+- **Mixing camera SKUs** — each different model = different firmware
+  quirks the tracking engine has to special-case.
+
+---
+
+## 6. Privacy / firewall notes (unchanged from 1.4)
+
+- Cameras + thermal sensors + Pi 5 sit on a **separate VLAN with no
+  internet route**. Block outbound at the router as a belt-and-braces
+  layer on top of the OpenIPC reflash.
 - Pi 5 has internet only when the operator SSHes in and explicitly
   enables it (for `apt update`).
-- The Maro server can be on the regular LAN (it serves the dashboard
-  to the user's phone).
+- The dashboard server stays on the regular LAN (it serves the UI to
+  the user's phone over local WiFi).
+- ESPHome firmware on the thermal sensors is built locally; no cloud
+  account, no telemetry.

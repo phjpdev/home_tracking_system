@@ -1,13 +1,16 @@
 """
-Camera Placement Plan Generator — Phase 1.3
+Camera Placement Plan Generator — Phase 1.5
 ============================================
 
 Generates an annotated floor plan image and a JSON config file for the
 tracking engine, based on a list of camera specifications.
 
-Hardware target (prototype): 6 x WiFi cameras already procured by client.
-                             (See docs/FINAL_CAMERA_SELECTION.md for the
-                             production PoE recommendation.)
+Hardware target:
+    - Prototype: 6 x WiFi cameras already procured by client (cams 1–6).
+    - Production-locked: OEM PoE IP camera board (HiSilicon-class SoC +
+      Sony image sensor, 1080p+ H.264/H.265 RTSP, IRCUT, IR LED ring,
+      M12 2.8 mm lens). Same lens spec across all 7 cameras + spares.
+      See docs/FINAL_CAMERA_SELECTION.md for the exact SKU.
 
 Building:        Floor-plan envelope 19.8 m x 10.2 m, ceiling 3.0 m.
                  Interior rooms occupy a horizontal strip
@@ -22,22 +25,35 @@ Hardware mounting constraints (per client review of v1.2):
       point. All cameras therefore mount on a ceiling drop bracket
       AT the interior corners.
 
-Phase 1.3 placements (per client screenshots, 6 cameras):
-    - K/WZ  (kitchen + living)   - 4 corner cameras (NW, NE, SW, SE)
-                                   each looking diagonally to the
-                                   opposite corner -> full coverage
-                                   incl. the previously-missed N strip.
-    - Yoga                       - 2 cameras on the EAST end (NE, SE)
-                                   both looking diagonally back into
-                                   Yoga. With per-room FOV clipping
-                                   their cones cannot bleed into SZ.
-    - SZ    (bedroom)            - NO camera this round. Entrance /
-                                   exit detection is deferred (see
-                                   README §6 for replacement options).
-    - BZ    (bathroom)           - out of scope.
+Phase 1.5 placements (7 cameras):
+    - K/WZ    (kitchen + living)  - 4 corner cameras (cams 1-4); each
+                                    wedge clipped to the L-shaped K/WZ
+                                    trackable polygon (fireplace blocker
+                                    truncates the upper L-arm at
+                                    x = FIREPLACE_X_MM).
+    - Yoga                        - 2 cameras (cams 5-6) on the east
+                                    end of Yoga, looking diagonally
+                                    back across the room.
+    - Hallway (behind Yoga)       - 1 camera (cam 7) at the east end
+                                    of the corridor, looking west
+                                    along the long axis. Added in v1.5
+                                    after client raised hallway
+                                    re-id continuity as a requirement.
+    - SZ      (bedroom)           - NO camera. Privacy room. Fall
+                                    detection is delegated to a
+                                    non-RF, non-imaging sensor: a
+                                    low-resolution thermal IR grid
+                                    (Panasonic AMG8833 8x8 + ESPHome).
+                                    Chosen because the client tested
+                                    Aqara FP2 / Apollo R1 and both
+                                    failed due to METAL IN THE WALLS
+                                    scattering 24/60 GHz mmWave.
+    - BZ      (bathroom)          - out of scope for cameras; fall
+                                    detection = thermal IR grid +
+                                    water-leak sensor (secondary).
 
-FOV cones are clipped to each camera's OWN ROOM rectangle (not just
-the global interior strip) so a wedge cannot visually cross a wall.
+FOV cones are clipped to each room's TRACKABLE POLYGON (defined by
+the client on the floor plan, occlusion-aware).
 
 USAGE
 -----
@@ -106,7 +122,7 @@ BLD_BOTTOM_PX = 485
 #     polygons in TRACKABLE_AREAS_MM.
 INTERIOR_X_MIN_MM =  1700
 INTERIOR_X_MAX_MM = 17900
-INTERIOR_Y_MIN_MM =  4500
+INTERIOR_Y_MIN_MM =  2500
 INTERIOR_Y_MAX_MM =  8700
 
 # Per-room interior bounds (left-to-right), matching the colour
@@ -115,10 +131,11 @@ INTERIOR_Y_MAX_MM =  8700
 # regenerated automatically by step_pipeline/extract_floor_plan.py
 # once the STEP-parsing tool is in place.
 ROOM_BOUNDS_MM = {
-    "K/WZ": {"x": ( 1700,  6700), "y": (4500, 8400)},
-    "BZ":   {"x": ( 6700,  8420), "y": (6400, 8400)},  # out of scope
-    "SZ":   {"x": ( 8420, 12100), "y": (4500, 8400)},
-    "Yoga": {"x": (12100, 17800), "y": (4500, 8400)},
+    "K/WZ":    {"x": ( 1700,  6700), "y": (4500, 8400)},
+    "BZ":      {"x": ( 6700,  8420), "y": (6400, 8400)},  # out of scope
+    "SZ":      {"x": ( 8420, 12100), "y": (4500, 8400)},
+    "Yoga":    {"x": (12100, 17800), "y": (4500, 8400)},
+    "Hallway": {"x": (12000, 17900), "y": (2500, 4500)},
 }
 
 # ---------------------------------------------------------------------
@@ -148,18 +165,29 @@ FIREPLACE_X_MM = 10000
 
 TRACKABLE_AREAS_MM: dict[str, list[tuple[int, int]]] = {
     "K/WZ": [
-        ( 2400,           8700),
-        ( 2500,           4500),
-        (FIREPLACE_X_MM,  4500),
-        (FIREPLACE_X_MM,  6500),
-        ( 6300,           6500),
-        ( 6300,           8700),
+        ( 2500,           9200),
+        ( 2500,           5000),
+        (FIREPLACE_X_MM,  5000),
+        (FIREPLACE_X_MM,  7000),
+        ( 6300,           7000),
+        ( 6300,           9200),
     ],
     "Yoga": [
-        (14100, 4800),
-        (17900, 4800),
-        (17900, 8300),
-        (14100, 8300),
+        (14100, 5300),
+        (17900, 5300),
+        (17900, 8800),
+        (14100, 8800),
+    ],
+    # Hallway behind Yoga (north of Yoga's north wall, in the upper
+    # interior strip). Single 7th camera at the east end fans west
+    # along the corridor; polygon clipped to the corridor itself.
+    # NOTE: hallway extents are a placeholder — adjust once the
+    # client confirms the exact corridor dimensions on the floor plan.
+    "Hallway": [
+        (14000, 8700),
+        (10100, 8700),
+        (10100, 8000),
+        (14000, 8000),
     ],
 }
 
@@ -214,7 +242,7 @@ def is_inside_interior(x_mm: float, y_mm: float) -> bool:
 # Tilt: degrees below horizontal (positive = looking down).
 
 #
-# Phase 1.3 placements (6 cameras: 4 K/WZ corners + 2 Yoga east).
+# Phase 1.5 placements (7 cameras: 4 K/WZ corners + 2 Yoga east + 1 hallway).
 #
 # Constraints from the latest client feedback (review of v1.2):
 #   - Long N + S walls of every interior room are sliding glass.
@@ -252,7 +280,7 @@ CAMERAS = [
     {
         "id":       1,
         "name":     "cam_kwz_sw",
-        "x_mm":     2500, "y_mm": 8600, "z_mm": CEILING_H_MM,
+        "x_mm":     2600, "y_mm": 9100, "z_mm": CEILING_H_MM,
         "yaw_deg":  330,
         "tilt_deg":  35,
         "fov_h_deg": 66,
@@ -263,7 +291,7 @@ CAMERAS = [
     {
         "id":       2,
         "name":     "cam_kwz_nw",
-        "x_mm":     2500, "y_mm": 5200, "z_mm": CEILING_H_MM,
+        "x_mm":     2600, "y_mm": 5700, "z_mm": CEILING_H_MM,
         "yaw_deg":   25,
         "tilt_deg":  35,
         "fov_h_deg": 66,
@@ -274,7 +302,7 @@ CAMERAS = [
     {
         "id":       3,
         "name":     "cam_kwz_ne",
-        "x_mm":     6200, "y_mm": 4900, "z_mm": CEILING_H_MM,
+        "x_mm":     6200, "y_mm": 5400, "z_mm": CEILING_H_MM,
         "yaw_deg":  155,
         "tilt_deg":  35,
         "fov_h_deg": 66,
@@ -286,7 +314,7 @@ CAMERAS = [
     {
         "id":       4,
         "name":     "cam_kwz_se",
-        "x_mm":     6300, "y_mm": 6400, "z_mm": CEILING_H_MM,
+        "x_mm":     6300, "y_mm": 6900, "z_mm": CEILING_H_MM,
         "yaw_deg":  330,
         "tilt_deg":  35,
         "fov_h_deg": 66,
@@ -303,7 +331,7 @@ CAMERAS = [
     {
         "id":       5,
         "name":     "cam_yoga_ne",
-        "x_mm":    17800, "y_mm": 4900, "z_mm": CEILING_H_MM,
+        "x_mm":    17800, "y_mm": 5400, "z_mm": CEILING_H_MM,
         "yaw_deg":  155,
         "tilt_deg":  35,
         "fov_h_deg": 66,
@@ -314,7 +342,7 @@ CAMERAS = [
     {
         "id":       6,
         "name":     "cam_yoga_se",
-        "x_mm":    14200, "y_mm": 8200, "z_mm": CEILING_H_MM,
+        "x_mm":    14200, "y_mm": 8700, "z_mm": CEILING_H_MM,
         "yaw_deg":  330,
         "tilt_deg":  35,
         "fov_h_deg": 66,
@@ -323,9 +351,34 @@ CAMERAS = [
                     "looks NE-ish; stereo with cam 5)",
         "color":    "#d99a30",
     },
-    # NOTE: SZ has NO camera this round (per latest client feedback).
-    # Bedroom entrance/exit detection becomes a deferred item;
-    # candidate replacements are listed in README §6.
+
+    # ---- Hallway (north-strip corridor behind Yoga) : 1 camera ----
+    # Single wide camera at the east end of the corridor fans west
+    # along the long axis. Polygon clip keeps the wedge inside the
+    # corridor (~2 m deep × ~5.7 m long).
+    # NOTE: position is a PLACEHOLDER. Confirm with client where the
+    # actual structural mounting frame in the hallway is, then update
+    # x_mm / y_mm / yaw_deg accordingly. Lens spec is identical to
+    # cams 1-6 so the same OEM PoE board (5MP, IRCUT, 2.8 mm M12)
+    # can be ordered as the 7th + 1 spare.
+    {
+        "id":       7,
+        "name":     "cam_hallway_n",
+        "x_mm":    14100, "y_mm": 8200, "z_mm": CEILING_H_MM,
+        "yaw_deg":  180,                       # West, along the corridor
+        "tilt_deg":  35,
+        "fov_h_deg": 66,
+        "room":     "Hallway",
+        "role":     "Tracking (hallway east end, looks W along corridor)",
+        "color":    "#3aa566",
+    },
+
+    # NOTE: SZ + BZ have NO camera (privacy rooms). Fall detection
+    # there is handled by non-camera sensors (low-resolution thermal
+    # IR + water leak), see docs/FINAL_CAMERA_SELECTION.md §"Privacy-
+    # room sensors". Those sensors don't appear in this CAMERAS list
+    # because they don't produce x/y tracking output, only zone-level
+    # presence + fall events.
 ]
 
 
@@ -361,8 +414,9 @@ def fov_radius_mm(z_mm: float, tilt_deg: float) -> float:
 # blue matches the K/WZ background block in floor_plan.png; Yoga
 # orange matches the Yoga background block.
 ROOM_AREA_COLOR = {
-    "K/WZ": "#1f6dd1",
-    "Yoga": "#d99a30",
+    "K/WZ":    "#1f6dd1",
+    "Yoga":    "#d99a30",
+    "Hallway": "#3aa566",
 }
 
 
@@ -504,8 +558,9 @@ def render_floor_plan() -> None:
               bbox_to_anchor=(0.01, 0.99), fontsize=9, framealpha=0.95)
 
     fig.suptitle(
-        "Camera Placement Plan — Phase 1.4 "
-        "(per-camera FOV wedges, clipped to client-defined polygons)",
+        "Camera Placement Plan — Phase 1.5 "
+        "(7 cameras incl. hallway; PoE OEM board locked; "
+        "SZ/BZ via thermal-IR fall sensors)",
         fontsize=12, fontweight="bold", y=0.985,
     )
     ax.set_xlim(0, img_w)
@@ -523,7 +578,7 @@ def render_floor_plan() -> None:
 
 def export_config() -> None:
     config = {
-        "phase": "1.4-prototype-wifi",
+        "phase": "1.5-prototype-poe",
         "coordinate_system": {
             "origin": "NW corner of the floor-plan envelope (top-left)",
             "x_axis": "east (+x = right on plan)",
@@ -541,10 +596,11 @@ def export_config() -> None:
             room: {
                 "x_mm":     list(b["x"]),
                 "y_mm":     list(b["y"]),
-                "in_scope": room not in ("BZ", "SZ"),
+                "in_scope": room not in ("BZ",),
                 "scope_note": (
                     "out of scope this round" if room == "BZ" else
-                    "no camera this round (entry/exit deferred)"
+                    "no camera (privacy room — fall detection via "
+                    "thermal IR sensor, see FINAL_CAMERA_SELECTION.md)"
                     if room == "SZ" else "full tracking"
                 ),
                 "trackable_polygon_mm": [
@@ -552,6 +608,24 @@ def export_config() -> None:
                 ] if room in TRACKABLE_AREAS_MM else None,
             }
             for room, b in ROOM_BOUNDS_MM.items()
+        },
+        "privacy_room_sensors": {
+            "SZ": {
+                "type": "thermal-ir-grid",
+                "model": "Panasonic AMG8833 Grid-EYE (8x8 thermal)",
+                "purpose": "presence + fall detection (no imaging)",
+                "rationale": "client tested mmWave (Aqara FP2, "
+                             "Apollo R1) — both fail due to metal "
+                             "in walls. Thermal IR is RF-immune.",
+            },
+            "BZ": {
+                "type": "thermal-ir-grid + water-leak",
+                "model": "Panasonic AMG8833 + Aqara water leak sensor",
+                "purpose": "presence + fall detection + wet-floor "
+                           "secondary check",
+                "rationale": "same metal-wall constraint; water "
+                             "sensor reduces fall false negatives.",
+            },
         },
         "cameras": [
             {
@@ -567,17 +641,26 @@ def export_config() -> None:
                     "tilt_deg": cam["tilt_deg"],
                 },
                 "sensor": {
-                    # Prototype: client-procured WiFi camera, OV2640-class.
-                    # Replace with the production model once finalised — see
-                    # docs/FINAL_CAMERA_SELECTION.md.
-                    "model":             "wifi-prototype-OV2640",
-                    "transport":         "wifi",
-                    "stream_proto":      "rtsp-or-mjpeg",
+                    # Production-locked: OEM PoE IP camera board
+                    # (HiSilicon Hi3516-class SoC + Sony image sensor),
+                    # 1080p+ H.264 / H.265 RTSP, IRCUT, IR LED ring,
+                    # M12 2.8 mm lens. Embedded behind a 3D-printed
+                    # frame so only the lens objective is visible.
+                    # See docs/FINAL_CAMERA_SELECTION.md for the
+                    # exact SKU once the 1-unit smoke test passes.
+                    "model":             "oem-poe-board-h3516-imx335",
+                    "transport":         "ethernet-poe-802.3af",
+                    "stream_proto":      "rtsp",
+                    "codec_main":        "h.265",
+                    "codec_sub":         "h.264",
                     "fov_h_deg":         cam["fov_h_deg"],
                     "fov_v_deg":         50,
-                    "stream_resolution": [640, 480],
-                    "stream_fps":        12,
-                    "ir_night":          False,
+                    "stream_resolution_main": [2592, 1944],
+                    "stream_resolution_sub":  [640,  480],
+                    "stream_fps_sub":    15,
+                    "ir_night":          True,
+                    "ir_cut_filter":     True,
+                    "firmware_target":   "OpenIPC (after smoke test)",
                 },
             }
             for cam in CAMERAS
