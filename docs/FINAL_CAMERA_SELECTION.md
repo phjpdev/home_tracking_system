@@ -57,7 +57,7 @@ These OEM boards ship with a generic Chinese firmware that:
 1. **Network-level isolation first.** All cameras + the Pi 5 sit on a
    separate VLAN with no internet route. Block outbound at the router.
    The cameras *cannot* phone home even if the firmware tries.
-2. **OpenIPC firmware second.** Once the smoke test passes (see §3),
+2. **OpenIPC firmware second.** Once the smoke test passes (see the smoke-test section below),
    reflash all 8 boards to OpenIPC ([openipc.org](https://openipc.org)).
    OpenIPC is open source, supports the Hi3516 SoC + IMX335 sensor
    combo natively, and gives us:
@@ -118,25 +118,43 @@ scramble the radar return.
 ~ EUR 60–80 if 8×8 turns out too coarse for posture classification.
 Recommend starting with AMG8833 and upgrading only if needed.
 
-### How the thermal sensor classifies a fall
+**Floor footprints for fall logic (client mm vertices, exported as `privacy_thermal_zones_mm`):**
 
-Each frame from the Grid-EYE is an 8×8 grid of temperatures. We:
+- **BZ:** `(6400, 7100) → (10000, 7100) → (10000, 8700) → (8500, 8700) → (8500, 9100) → (6400, 9100)`
+- **SZ:** `(10100, 5000) → (14200, 5000) → (14200, 8000) → (10100, 8000)`
 
-1. Subtract a rolling background to get the heat blob.
-2. Fit an ellipse to the blob; compute the long-axis angle.
-3. Vertical ellipse + above-floor centroid = standing / sitting / lying-in-bed.
-4. Horizontal ellipse + on-floor centroid + still for > 10 s = **FALL EVENT**.
+### Fall logic (deployed) — SZ vs BZ
 
-For SZ this is enough to flag a fall when the person is not in the bed
-zone. For BZ the water-leak sensor adds a second confirmation channel:
-a fall in the shower triggers thermal-on-floor *and* water-on-floor.
+All logic uses the **floor-plan envelope frame** (mm, +x east, +y south). The **blob centroid** projected to the floor must fall inside the closed polygon `privacy_thermal_zones_mm["SZ"]` or `["BZ"]` in `output/cameras_config.json` (regenerated from `PRIVACY_THERMAL_ZONES_MM` in `generate_camera_plan.py`). Upstream steps (rolling background, centroid, blob orientation from PCA / ellipse) stay the same regardless of 8×8 or 32×24 hardware.
+
+**SZ (bedroom) — fall vs going to bed**
+
+1. **Trajectory gate (pre-stillness).** On the edge **vertical → horizontal**, measure  
+   `Δt = t_horizontal − t_vertical_entry`.  
+   - `Δt ≤ rapid_transition_max_s` (default **1.0 s**) → **rapid** fall cue (high confidence track if the rest of the chain fires).  
+   - `Δt ≥ slow_transition_min_s` (default **3.0 s**) → deliberate **lie-down** cue; combined with `sz_suppress_if_slow_to_rest_zone` this **suppresses** a fall alarm after confirmation (going to bed).
+2. **Confirmation (30 s, no motion).** The alarm does **not** fire on the first horizontal frame. Require **continuous** horizontal posture, **on floor**, inside the SZ polygon, with `motion_normalized ≤ motion_threshold_normalized` (default **0.02**) for **`sz_still_confirmation_s` (30 s)**. Any movement above the threshold **resets** this timer (e.g. sitting on the floor stretching — the person moves and no event fires; a true fall stays still).
+3. **Rest zone (optional).** `sz_rest_zone_polygon_mm` defaults to **null**. When populated (bed / couch footprint), a **non-rapid** horizontal rest inside that polygon is **suppressed**. A **rapid** transition that ends on the bed footprint can still raise an alarm (impact fall onto bed).
+
+Confidence after a confirmed SZ event: **high** if the last transition was rapid, else **medium**.
+
+**BZ (bathroom) — no furniture zone**
+
+1. **Horizontal + on floor** inside the BZ thermal polygon, motionless for **`bz_still_horizontal_s` (20 s)** → fall **medium** confidence. There is no bed/couch ambiguity: a long, still horizontal floor blob is inherently suspicious.
+2. **Water leak** (Aqara Zigbee wet) **true** at overlap with the thermal condition → **high** confidence (“thermal on floor + water on floor” for shower slip).
+
+**Implementation and tuning**
+
+- Python module: **`thermal_fall_detection.PrivacyThermalFallDetector`** at repo root.  
+- Thresholds: **`thermal_fall_detection`** block in `cameras_config.json` (kept in sync by `generate_camera_plan.py`).
 
 ### Pipeline integration
 
 - Thermal sensors run ESPHome → MQTT → same FastAPI server as the cameras.
-- API contract: `POST /events` with `{ "type": "fall", "room": "SZ" / "BZ", "ts": ... }`
-- Latency budget: `< 1 s` from fall to API call (much looser than the
-  150 ms the cameras hit, because falls don't move).
+- API contract example: `POST /events` with  
+  `{ "type": "fall", "room": "SZ" | "BZ", "confidence": "high" | "medium", "ts": <unix> }`  
+  and for BZ optionally `"water_leak": true` when the leak sensor is wet.
+- Latency budget: on the order of **tens of seconds** gate by design (confirmation windows), not sub-second like camera tracking — there is no rush on the first frame.
 
 ---
 
@@ -150,10 +168,7 @@ Same plan as before, just updated for the actual SKU:
    - IR cut-in / cut-out behaves cleanly under client's actual lighting
    - 48 h continuous stream with no drop
    - Stock firmware survives until OpenIPC flash; OpenIPC flash succeeds
-3. Thermal: place sensor on a 3 m ceiling, walk + lie-down test:
-   - Standing person reads as a vertical blob centred ~50 cm below ceiling
-   - Lying-on-floor reads as a horizontal blob centred ~250 cm below ceiling
-   - Posture flip from vertical → horizontal is unambiguous in the data
+3. Thermal: ceiling mount, walk + **rapid** lie-down vs **slow** lie-down; verify the state machine in `thermal_fall_detection.py`: **30 s** stillness before SZ alarm, **20 s** for BZ horizontal floor; optional **water_leak** raises BZ severity.
 4. **Only after both smoke tests pass**, bulk-order: 7 more camera boards
    + 1 more thermal sensor + spares + the switch + cabling below.
 

@@ -14,7 +14,7 @@
       "x_min": 1700,
       "x_max": 17900,
       "y_min": 2500,
-      "y_max": 8700
+      "y_max": 9100
     },
     "ceiling_height_mm": 3000
   },
@@ -55,33 +55,78 @@
           6300,
           9200
         ]
-      ]
+      ],
+      "privacy_thermal_polygon_mm": null
     },
     "BZ": {
       "x_mm": [
-        6700,
-        8420
+        6400,
+        10000
       ],
       "y_mm": [
-        6400,
-        8400
+        7100,
+        9100
       ],
       "in_scope": false,
-      "scope_note": "out of scope this round",
-      "trackable_polygon_mm": null
+      "scope_note": "no camera \u2014 thermal IR + water leak (BZ) fall detection; see thermal_fall_detection + FINAL_CAMERA_SELECTION.md",
+      "trackable_polygon_mm": null,
+      "privacy_thermal_polygon_mm": [
+        [
+          6400,
+          7100
+        ],
+        [
+          10000,
+          7100
+        ],
+        [
+          10000,
+          8700
+        ],
+        [
+          8500,
+          8700
+        ],
+        [
+          8500,
+          9100
+        ],
+        [
+          6400,
+          9100
+        ]
+      ]
     },
     "SZ": {
       "x_mm": [
-        8420,
-        12100
+        10100,
+        14200
       ],
       "y_mm": [
-        4500,
-        8400
+        5000,
+        8000
       ],
       "in_scope": true,
-      "scope_note": "no camera (privacy room \u2014 fall detection via thermal IR sensor, see FINAL_CAMERA_SELECTION.md)",
-      "trackable_polygon_mm": null
+      "scope_note": "no camera \u2014 thermal IR (SZ) fall detection; see thermal_fall_detection + FINAL_CAMERA_SELECTION.md",
+      "trackable_polygon_mm": null,
+      "privacy_thermal_polygon_mm": [
+        [
+          10100,
+          5000
+        ],
+        [
+          14200,
+          5000
+        ],
+        [
+          14200,
+          8000
+        ],
+        [
+          10100,
+          8000
+        ]
+      ]
     },
     "Yoga": {
       "x_mm": [
@@ -111,7 +156,8 @@
           14100,
           8800
         ]
-      ]
+      ],
+      "privacy_thermal_polygon_mm": null
     },
     "Hallway": {
       "x_mm": [
@@ -141,21 +187,80 @@
           14000,
           8000
         ]
-      ]
+      ],
+      "privacy_thermal_polygon_mm": null
     }
+  },
+  "privacy_thermal_zones_mm": {
+    "BZ": [
+      [
+        6400,
+        7100
+      ],
+      [
+        10000,
+        7100
+      ],
+      [
+        10000,
+        8700
+      ],
+      [
+        8500,
+        8700
+      ],
+      [
+        8500,
+        9100
+      ],
+      [
+        6400,
+        9100
+      ]
+    ],
+    "SZ": [
+      [
+        10100,
+        5000
+      ],
+      [
+        14200,
+        5000
+      ],
+      [
+        14200,
+        8000
+      ],
+      [
+        10100,
+        8000
+      ]
+    ]
+  },
+  "thermal_fall_detection": {
+    "rapid_transition_max_s": 1.0,
+    "slow_transition_min_s": 3.0,
+    "sz_still_confirmation_s": 30.0,
+    "bz_still_horizontal_s": 20.0,
+    "motion_threshold_normalized": 0.02,
+    "sz_suppress_if_slow_to_rest_zone": true,
+    "event_schema_note": "After confirmation, POST /events e.g. { \"type\": \"fall\", \"room\": \"SZ\"|\"BZ\", \"confidence\":\"high\"|\"medium\", \"ts\": unix_f } ; include water_leak:true in BZ when Zigbee wet.",
+    "sz_rest_zone_polygon_mm": null,
+    "logic_module": "thermal_fall_detection.PrivacyThermalFallDetector",
+    "description": "SZ: rapid vertical\u2192horizontal (\u2264rapid_transition_max_s) + sz_still_confirmation_s motionless horizontal blob \u2192 high/med fall; slow transition or stationary rest polygon suppresses bedtime false positives. BZ: no bed/couch \u2014 horizontal-on-floor bz_still_horizontal_s stillness triggers fall (water leak \u2192 high confidence for shower)."
   },
   "privacy_room_sensors": {
     "SZ": {
       "type": "thermal-ir-grid",
-      "model": "Panasonic AMG8833 Grid-EYE (8x8 thermal)",
-      "purpose": "presence + fall detection (no imaging)",
-      "rationale": "client tested mmWave (Aqara FP2, Apollo R1) \u2014 both fail due to metal in walls. Thermal IR is RF-immune."
+      "model": "Panasonic AMG8833 Grid-EYE (8\u00d78 thermal) or MLX90640 32\u00d724",
+      "purpose": "presence + fall detection (heat blob posture; not imaging)",
+      "rationale": "client tested mmWave (Aqara FP2, Apollo R1) \u2014 both fail due to metal in walls. Thermal IR is optical / RF-immune."
     },
     "BZ": {
       "type": "thermal-ir-grid + water-leak",
-      "model": "Panasonic AMG8833 + Aqara water leak sensor",
-      "purpose": "presence + fall detection + wet-floor secondary check",
-      "rationale": "same metal-wall constraint; water sensor reduces fall false negatives."
+      "model": "Panasonic AMG8833 / MLX90640 + Aqara water leak sensor",
+      "purpose": "presence + fall detection; wet floor boosts shower-slip confidence",
+      "rationale": "same radar failure mode as SZ; thermal-on-floor + water-on-floor \u21d2 very high confidence for shower falls."
     }
   },
   "cameras": [

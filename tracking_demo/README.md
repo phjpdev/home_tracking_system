@@ -60,6 +60,10 @@ Press `q` in any window to quit.
 - Top-left FPS counter. On a modern laptop CPU you should see ~7-12 fps with
   one or two people in frame. Drops as more people enter.
 
+## Privacy rooms (SZ / BZ) — not part of this demo
+
+Optical tracking and this demo stop at the camera-tracked rooms. **SZ (bedroom)** and **BZ (bathroom)** use low-resolution thermal IR + optional water leak; fall logic is implemented in the repo root module [`thermal_fall_detection.py`](../thermal_fall_detection.py) with polygons and thresholds in [`output/cameras_config.json`](../output/cameras_config.json). The production HTTP API can emit `fall` events from that path in parallel with camera `persons` POSTs.
+
 ## How this maps to the production system
 
 | Demo                                   | Production (`tracking_engine/` on Pi 5 + Hailo)             |
@@ -71,6 +75,7 @@ Press `q` in any window to quit.
 | `(bbox_x / w, foot_y / h)` floor pos   | 4-point per-camera homography -> mm in floor-plan frame     |
 | `print(json.dumps(...))`               | HTTP POST to Maro / FastAPI                                 |
 | Single "demo" zone                     | Privacy filter: SZ etc. replaced with zone centroid         |
+| (not in demo)                         | Thermal fall: `thermal_fall_detection.py` + MQTT / `POST /events` |
 
 The demo deliberately keeps the same JSON shape as the production POST so the
 Maro server side can be developed against the demo's stdout *now*, instead of

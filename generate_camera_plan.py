@@ -123,17 +123,21 @@ BLD_BOTTOM_PX = 485
 INTERIOR_X_MIN_MM =  1700
 INTERIOR_X_MAX_MM = 17900
 INTERIOR_Y_MIN_MM =  2500
-INTERIOR_Y_MAX_MM =  8700
+# Must cover the tallest client-defined thermal footprints (BZ extends to y=9100).
+INTERIOR_Y_MAX_MM =  9100
 
 # Per-room interior bounds (left-to-right), matching the colour
 # overlays the client drew on the updated floor_plan.png.
 # Estimates from pixel measurement of the colour blocks; will be
 # regenerated automatically by step_pipeline/extract_floor_plan.py
 # once the STEP-parsing tool is in place.
+# BZ/SZ rectangles here are tightened to envelope PRIVACY_THERMAL_ZONES_MM
+# thermal footprints once those client polygons landed.
 ROOM_BOUNDS_MM = {
     "K/WZ":    {"x": ( 1700,  6700), "y": (4500, 8400)},
-    "BZ":      {"x": ( 6700,  8420), "y": (6400, 8400)},  # out of scope
-    "SZ":      {"x": ( 8420, 12100), "y": (4500, 8400)},
+    # Axis-aligned envelopes around client thermal / privacy footprints (BZ, SZ).
+    "BZ":      {"x": ( 6400, 10000), "y": (7100, 9100)},
+    "SZ":      {"x": (10100, 14200), "y": (5000, 8000)},
     "Yoga":    {"x": (12100, 17800), "y": (4500, 8400)},
     "Hallway": {"x": (12000, 17900), "y": (2500, 4500)},
 }
@@ -189,6 +193,50 @@ TRACKABLE_AREAS_MM: dict[str, list[tuple[int, int]]] = {
         (10100, 8000),
         (14000, 8000),
     ],
+}
+
+# ---------------------------------------------------------------------
+# Privacy rooms (BZ, SZ): thermal IR fall-detection footprints (mm).
+# Client-defined polygons in the SAME envelope frame as trackable areas.
+# No camera wedges here — rendered as filled overlays + exported to JSON
+# for ``thermal_fall_detection.PrivacyThermalFallDetector``.
+#
+# SZ optional bed / couch rest polygon: set vertices when calibrated on
+# site (null in JSON disables rest-only suppression cues).
+# ---------------------------------------------------------------------
+PRIVACY_THERMAL_ZONES_MM: dict[str, list[tuple[int, int]]] = {
+    "BZ": [
+        (6400, 7100),
+        (10000, 7100),
+        (10000, 8700),
+        (8500, 8700),
+        (8500, 9100),
+        (6400, 9100),
+    ],
+    "SZ": [
+        (10100, 5000),
+        (14200, 5000),
+        (14200, 8000),
+        (10100, 8000),
+    ],
+}
+
+SZ_REST_ZONE_POLYGON_MM: list[tuple[int, int]] | None = None
+
+# Tunables mirrored into output/cameras_config.json ``thermal_fall_detection``.
+THERMAL_FALL_DETECTION_EXPORT = {
+    "rapid_transition_max_s":        1.0,
+    "slow_transition_min_s":         3.0,
+    "sz_still_confirmation_s":      30.0,
+    "bz_still_horizontal_s":        20.0,
+    "motion_threshold_normalized": 0.02,
+    "sz_suppress_if_slow_to_rest_zone": True,
+    # API hint for MQTT / ESPHome integration
+    "event_schema_note": (
+        "After confirmation, POST /events e.g. "
+        '{ "type": "fall", "room": "SZ"|"BZ", "confidence":"high"|"medium", '
+        '"ts": unix_f } ; include water_leak:true in BZ when Zigbee wet.'
+    ),
 }
 
 # Walls that must NOT be used for camera mounting (per client review):
@@ -375,10 +423,10 @@ CAMERAS = [
 
     # NOTE: SZ + BZ have NO camera (privacy rooms). Fall detection
     # there is handled by non-camera sensors (low-resolution thermal
-    # IR + water leak), see docs/FINAL_CAMERA_SELECTION.md §"Privacy-
-    # room sensors". Those sensors don't appear in this CAMERAS list
-    # because they don't produce x/y tracking output, only zone-level
-    # presence + fall events.
+    # IR + optional water leak); see docs/FINAL_CAMERA_SELECTION.md and
+    # thermal_fall_detection.py. Those sensors don't appear in this
+    # CAMERAS list because they don't produce x/y tracking output, only
+    # zone-level presence + fall events.
 ]
 
 
@@ -418,6 +466,25 @@ ROOM_AREA_COLOR = {
     "Yoga":    "#d99a30",
     "Hallway": "#3aa566",
 }
+
+# Privacy thermal footprints (BZ / SZ) — distinct from optical trackables.
+PRIVACY_THERMAL_FACE = {
+    "BZ": "#c44bd6",
+    "SZ": "#6b4bc4",
+}
+
+PRIVACY_THERMAL_ALPHA = 0.18
+
+
+def draw_privacy_thermal_zones(ax) -> None:
+    """Fill + outline client BZ/SZ thermal fall-detection polygons."""
+    for name, pts_mm in PRIVACY_THERMAL_ZONES_MM.items():
+        color = PRIVACY_THERMAL_FACE[name]
+        poly_px = [mm_to_px(x, y) for x, y in pts_mm]
+        ax.add_patch(
+            Polygon(poly_px, closed=True, facecolor=color,
+                    alpha=PRIVACY_THERMAL_ALPHA, edgecolor=color,
+                    linewidth=1.2, linestyle="-", zorder=6))
 
 
 def trackable_clip_path(room: str) -> MplPath:
@@ -539,6 +606,8 @@ def render_floor_plan() -> None:
     for room in TRACKABLE_AREAS_MM:
         draw_trackable_outline(ax, room)
 
+    draw_privacy_thermal_zones(ax)
+
     room_clips = {room: trackable_clip_path(room)
                   for room in TRACKABLE_AREAS_MM}
     for cam in CAMERAS:
@@ -553,6 +622,12 @@ def render_floor_plan() -> None:
                        label="Trackable-area polygon (outer bound)"),
         mpatches.Patch(facecolor="#1f6dd1", edgecolor="white",
                        label="Camera position (triangle = view direction)"),
+        mpatches.Patch(facecolor="#c44bd6", alpha=PRIVACY_THERMAL_ALPHA,
+                       edgecolor="#c44bd6",
+                       label="Thermal IR fall-detection footprint (BZ)"),
+        mpatches.Patch(facecolor="#6b4bc4", alpha=PRIVACY_THERMAL_ALPHA,
+                       edgecolor="#6b4bc4",
+                       label="Thermal IR fall-detection footprint (SZ)"),
     ]
     ax.legend(handles=legend_elements, loc="upper left",
               bbox_to_anchor=(0.01, 0.99), fontsize=9, framealpha=0.95)
@@ -598,33 +673,71 @@ def export_config() -> None:
                 "y_mm":     list(b["y"]),
                 "in_scope": room not in ("BZ",),
                 "scope_note": (
-                    "out of scope this round" if room == "BZ" else
-                    "no camera (privacy room — fall detection via "
-                    "thermal IR sensor, see FINAL_CAMERA_SELECTION.md)"
+                    "no camera — thermal IR + water leak (BZ) fall detection; "
+                    "see thermal_fall_detection + FINAL_CAMERA_SELECTION.md"
+                    if room == "BZ" else
+                    "no camera — thermal IR (SZ) fall detection; "
+                    "see thermal_fall_detection + FINAL_CAMERA_SELECTION.md"
                     if room == "SZ" else "full tracking"
                 ),
                 "trackable_polygon_mm": [
                     list(pt) for pt in TRACKABLE_AREAS_MM[room]
                 ] if room in TRACKABLE_AREAS_MM else None,
+                "privacy_thermal_polygon_mm": (
+                    [list(pt) for pt in PRIVACY_THERMAL_ZONES_MM[room]]
+                    if room in PRIVACY_THERMAL_ZONES_MM else None
+                ),
             }
             for room, b in ROOM_BOUNDS_MM.items()
+        },
+        "privacy_thermal_zones_mm": {
+            k: [[x, y] for x, y in poly]
+            for k, poly in PRIVACY_THERMAL_ZONES_MM.items()
+        },
+        "thermal_fall_detection": {
+            **THERMAL_FALL_DETECTION_EXPORT,
+            "sz_rest_zone_polygon_mm": (
+                [[x, y] for x, y in SZ_REST_ZONE_POLYGON_MM]
+                if SZ_REST_ZONE_POLYGON_MM else None
+            ),
+            "logic_module": "thermal_fall_detection.PrivacyThermalFallDetector",
+            "description": (
+                "SZ: rapid vertical→horizontal (≤rapid_transition_max_s) + "
+                "sz_still_confirmation_s motionless horizontal blob → "
+                "high/med fall; slow transition or stationary rest polygon "
+                "suppresses bedtime false positives. "
+                "BZ: no bed/couch — horizontal-on-floor "
+                "bz_still_horizontal_s stillness triggers fall "
+                "(water leak → high confidence for shower)."
+            ),
         },
         "privacy_room_sensors": {
             "SZ": {
                 "type": "thermal-ir-grid",
-                "model": "Panasonic AMG8833 Grid-EYE (8x8 thermal)",
-                "purpose": "presence + fall detection (no imaging)",
-                "rationale": "client tested mmWave (Aqara FP2, "
-                             "Apollo R1) — both fail due to metal "
-                             "in walls. Thermal IR is RF-immune.",
+                "model": (
+                    "Panasonic AMG8833 Grid-EYE (8×8 thermal) or MLX90640 32×24"
+                ),
+                "purpose": (
+                    "presence + fall detection (heat blob posture; not imaging)"
+                ),
+                "rationale": (
+                    "client tested mmWave (Aqara FP2, Apollo R1) — both fail due "
+                    "to metal in walls. Thermal IR is optical / RF-immune."
+                ),
             },
             "BZ": {
                 "type": "thermal-ir-grid + water-leak",
-                "model": "Panasonic AMG8833 + Aqara water leak sensor",
-                "purpose": "presence + fall detection + wet-floor "
-                           "secondary check",
-                "rationale": "same metal-wall constraint; water "
-                             "sensor reduces fall false negatives.",
+                "model": (
+                    "Panasonic AMG8833 / MLX90640 + Aqara water leak sensor"
+                ),
+                "purpose": (
+                    "presence + fall detection; wet floor boosts shower-slip "
+                    "confidence"
+                ),
+                "rationale": (
+                    "same radar failure mode as SZ; thermal-on-floor + "
+                    "water-on-floor ⇒ very high confidence for shower falls."
+                ),
             },
         },
         "cameras": [
