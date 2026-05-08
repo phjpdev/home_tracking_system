@@ -2,8 +2,8 @@
 Multi-Person Tracking + Re-ID Demo  (CPU-only, single camera)
 ==============================================================
 
-Goal: show the client what the end-to-end tracking concept will look
-like, BEFORE the full Pi-5 multi-camera system is built.
+Goal: demonstrate end-to-end tracking and re-ID on one camera before the
+full multi-camera Pi deployment is available.
 
 What it does, per frame:
     1. read a frame from a webcam or video file
@@ -25,8 +25,8 @@ What it is NOT:
       position is just `(bbox_centre_x / w, foot_y / h)`. The full
       tracking engine on the Pi will use a per-camera homography
       computed by the calibration tool.
-    - multi-camera. This is single-camera by design — to keep the
-      demo runnable on the client's laptop today.
+    - multi-camera. This is single-camera by design — kept minimal so it
+      runs easily on a developer laptop with a webcam.
 
 USAGE
 -----

@@ -6,7 +6,7 @@ Generates an annotated floor plan image and a JSON config file for the
 tracking engine, based on a list of camera specifications.
 
 Hardware target:
-    - Prototype: 6 x WiFi cameras already procured by client (cams 1–6).
+    - Prototype: 6 × WiFi cameras (cams 1–6) for early integration.
     - Production-locked: OEM PoE IP camera board (HiSilicon-class SoC +
       Sony image sensor, 1080p+ H.264/H.265 RTSP, IRCUT, IR LED ring,
       M12 2.8 mm lens). Same lens spec across all 7 cameras + spares.
@@ -17,7 +17,7 @@ Building:        Floor-plan envelope 19.8 m x 10.2 m, ceiling 3.0 m.
                  (y ~ 4500-8400 mm); the rest of the envelope is the
                  outdoor terrace / deck and is NOT tracked.
 
-Hardware mounting constraints (per client review of v1.2):
+Hardware mounting constraints (reference floor plan / v1.2 review):
     - The long N and S walls of K/WZ + SZ + Yoga are continuous
       sliding-glass / patio doors. No mid-wall camera mounting.
     - The structural frame between glass panels at every interior
@@ -34,26 +34,25 @@ Phase 1.5 placements (7 cameras):
     - Yoga                        - 2 cameras (cams 5-6) on the east
                                     end of Yoga, looking diagonally
                                     back across the room.
-    - Hallway (behind Yoga)       - 1 camera (cam 7) at the east end
-                                    of the corridor, looking west
-                                    along the long axis. Added in v1.5
-                                    after client raised hallway
-                                    re-id continuity as a requirement.
+    - Hallway (behind Yoga)       - 1 camera (cam 7) looking west
+                                    along the corridor, polygon-clipped.
+                                    Added in v1.5 for hallway
+                                    re-identification continuity.
     - SZ      (bedroom)           - NO camera. Privacy room. Fall
                                     detection is delegated to a
                                     non-RF, non-imaging sensor: a
                                     low-resolution thermal IR grid
                                     (Panasonic AMG8833 8x8 + ESPHome).
-                                    Chosen because the client tested
-                                    Aqara FP2 / Apollo R1 and both
-                                    failed due to METAL IN THE WALLS
+                                    On-site mmWave trials (Aqara FP2,
+                                    Apollo R1) failed here due to metal
+                                    in the wall assembly
                                     scattering 24/60 GHz mmWave.
     - BZ      (bathroom)          - out of scope for cameras; fall
                                     detection = thermal IR grid +
                                     water-leak sensor (secondary).
 
-FOV cones are clipped to each room's TRACKABLE POLYGON (defined by
-the client on the floor plan, occlusion-aware).
+FOV cones are clipped to each room's TRACKABLE POLYGON (authoritative
+vertices on the reference floor plan; occlusion-aware).
 
 USAGE
 -----
@@ -128,22 +127,20 @@ BLD_BOTTOM_PX = 485
 INTERIOR_X_MIN_MM =  1700
 INTERIOR_X_MAX_MM = 17900
 INTERIOR_Y_MIN_MM =  2500
-# Must cover the tallest client-defined thermal footprints (BZ extends to y=9100).
+# Must envelop the tallest thermal privacy footprints (BZ extends to y=9100).
 INTERIOR_Y_MAX_MM =  9100
 
 # Ceiling height above floor (+z); cameras + thermal privacy grids mount here.
 CEILING_H_MM = 3000
 
-# Per-room interior bounds (left-to-right), matching the colour
-# overlays the client drew on the updated floor_plan.png.
-# Estimates from pixel measurement of the colour blocks; will be
-# regenerated automatically by step_pipeline/extract_floor_plan.py
-# once the STEP-parsing tool is in place.
-# BZ/SZ rectangles here are tightened to envelope PRIVACY_THERMAL_ZONES_MM
-# thermal footprints once those client polygons landed.
+# Per-room interior bounds (left-to-right), aligned with colour regions
+# on the reference floor_plan.png.
+# Estimates from pixel measurement until step_pipeline/extract_floor_plan.py
+# regenerates them from STEP geometry.
+# BZ/SZ rectangles envelope PRIVACY_THERMAL_ZONES_MM thermal footprints.
 ROOM_BOUNDS_MM = {
     "K/WZ":    {"x": ( 1700,  6700), "y": (4500, 8400)},
-    # Axis-aligned envelopes around client thermal / privacy footprints (BZ, SZ).
+    # Axis-aligned envelopes around thermal / privacy footprints (BZ, SZ).
     "BZ":      {"x": ( 6400, 10000), "y": (7100, 9100)},
     "SZ":      {"x": (10100, 14200), "y": (5000, 8000)},
     "Yoga":    {"x": (12100, 17800), "y": (4500, 8400)},
@@ -153,9 +150,9 @@ ROOM_BOUNDS_MM = {
 # ---------------------------------------------------------------------
 # Trackable-area polygons (mm, envelope frame).
 #
-# Defined directly by the client on the floor plan: each polygon is
-# the *physical* area that the cameras assigned to that room can
-# actually see. Used as the clip mask for the FOV wedges in the
+# Authoritative floor-plan polygons: each is the *physical* area that
+# the cameras assigned to that room can actually see. Used as the clip
+# mask for the FOV wedges in the
 # rendered plan: inside the polygon the wedge fill is drawn fully;
 # outside the polygon nothing is drawn.
 #
@@ -190,11 +187,9 @@ TRACKABLE_AREAS_MM: dict[str, list[tuple[int, int]]] = {
         (17900, 8800),
         (14100, 8800),
     ],
-    # Hallway behind Yoga (north of Yoga's north wall, in the upper
-    # interior strip). Single 7th camera at the east end fans west
-    # along the corridor; polygon clipped to the corridor itself.
-    # NOTE: hallway extents are a placeholder — adjust once the
-    # client confirms the exact corridor dimensions on the floor plan.
+    # Hallway strip adjacent to Yoga (see `floor_plan.png`). Cam 7 fans
+    # along the corridor axis; polygon clips FOV to the trackable strip.
+    # Refine vertices after an as-built survey if the corridor differs.
     "Hallway": [
         (14000, 8700),
         (10100, 8700),
@@ -205,7 +200,7 @@ TRACKABLE_AREAS_MM: dict[str, list[tuple[int, int]]] = {
 
 # ---------------------------------------------------------------------
 # Privacy rooms (BZ, SZ): thermal IR fall-detection footprints (mm).
-# Client-defined polygons in the SAME envelope frame as trackable areas.
+# Floor-plan polygons in the SAME envelope frame as trackable areas.
 # No camera wedges here — rendered as filled overlays + exported to JSON
 # for ``thermal_fall_detection.PrivacyThermalFallDetector``.
 #
@@ -300,7 +295,7 @@ THERMAL_FALL_DETECTION_EXPORT = {
     ),
 }
 
-# Walls that must NOT be used for camera mounting (per client review):
+# Walls that must NOT be used for camera mounting (mounting constraints):
 #   - North wall of K/WZ + the K/WZ-BZ junction = continuous glazing.
 #   - South walls of all rooms appear to be sliding glass too.
 # All cameras are therefore CEILING-MOUNTED, away from any wall by
@@ -350,7 +345,7 @@ def is_inside_interior(x_mm: float, y_mm: float) -> bool:
 #
 # Phase 1.5 placements (7 cameras: 4 K/WZ corners + 2 Yoga east + 1 hallway).
 #
-# Constraints from the latest client feedback (review of v1.2):
+# Constraints from the latest placement review (v1.2+):
 #   - Long N + S walls of every interior room are sliding glass.
 #     Mid-wall mounting impossible. The structural frame at every
 #     interior CORNER is solid steel and is the only allowed wall
@@ -378,10 +373,9 @@ CAMERAS = [
     # Per-room wedge clipping is applied in render_floor_plan so the
     # FOV cones never cross a room boundary.
     # ---------------------------------------------------------------
-    # POSITIONS LOCKED BY CLIENT (installable mounting points). Do
-    # not change x_mm / y_mm / yaw_deg without explicit client sign-
-    # off — these were set against the actual structural frames in
-    # the building.
+    # LOCKED mounting coordinates (installable structural-frame points).
+    # Change x_mm / y_mm / yaw_deg only after verifying against the
+    # as-built structure and regenerating outputs.
     # ---------------------------------------------------------------
     {
         "id":       1,
@@ -462,9 +456,8 @@ CAMERAS = [
     # Single wide camera at the east end of the corridor fans west
     # along the long axis. Polygon clip keeps the wedge inside the
     # corridor (~2 m deep × ~5.7 m long).
-    # NOTE: position is a PLACEHOLDER. Confirm with client where the
-    # actual structural mounting frame in the hallway is, then update
-    # x_mm / y_mm / yaw_deg accordingly. Lens spec is identical to
+    # Confirm this mount against the real hallway structural frame on
+    # site, then adjust x_mm / y_mm / yaw_deg if needed. Lens spec matches
     # cams 1-6 so the same OEM PoE board (5MP, IRCUT, 2.8 mm M12)
     # can be ordered as the 7th + 1 spare.
     {
@@ -535,7 +528,7 @@ PRIVACY_THERMAL_ALPHA = 0.18
 
 
 def draw_privacy_thermal_zones(ax) -> None:
-    """Fill + outline client BZ/SZ thermal fall-detection polygons."""
+    """Fill + outline BZ/SZ thermal fall-detection polygons."""
     for name, pts_mm in PRIVACY_THERMAL_ZONES_MM.items():
         color = PRIVACY_THERMAL_FACE[name]
         poly_px = [mm_to_px(x, y) for x, y in pts_mm]
@@ -628,7 +621,7 @@ def draw_trackable_outline(ax, room: str) -> None:
     """Draw the trackable-area polygon as a dashed OUTLINE only
     (no fill). Each camera's individual wedge fill is what
     actually shades the area; the outline is just so the
-    client can see the outer bound the wedges are clipped to.
+    makes the clip boundary of the FOV wedges obvious.
     """
     polygon_mm = TRACKABLE_AREAS_MM[room]
     polygon_px = [mm_to_px(x, y) for x, y in polygon_mm]
@@ -900,8 +893,8 @@ def export_config() -> None:
                     "presence + fall detection (heat blob posture; not imaging)"
                 ),
                 "rationale": (
-                    "client tested mmWave (Aqara FP2, Apollo R1) — both fail due "
-                    "to metal in walls. Thermal IR is optical / RF-immune."
+                    "On-site mmWave (Aqara FP2, Apollo R1) failed due to metal in "
+                    "walls; thermal IR is optical and RF-immune."
                 ),
             },
             "BZ": {

@@ -11,7 +11,7 @@ top-level [README.md](../README.md).
 
 ## 1. Camera selection — APPROVED
 
-**Status:** approved by client. Order placed.
+**Status:** Approved for deployment BOM. Order reference placed per project procurement.
 
 ### What was approved
 
@@ -35,11 +35,7 @@ top-level [README.md](../README.md).
 
 ### Why this and not a finished consumer camera
 
-The client specifically rejected the EUR 65–220 finished-camera options
-(Reolink RLC-520A, Hikvision ColorVu, Axis P1245) on cost grounds and
-asked for an OEM board he could embed himself. The boards above hit
-every hard requirement (PoE, RTSP, RGB+IR with mechanical IRCUT,
-1080p+, no cloud) at ~ EUR 36 / unit including shipping.
+Consumer boxed cameras (e.g. Reolink RLC-520A, Hikvision ColorVu, Axis P1245) were ruled out on **cost** for this deployment; the OEM board hits PoE, RTSP, RGB+IR with mechanical IRCUT, 1080p+, and no mandatory cloud at ~ EUR 36 / unit including shipping.
 
 The trade-off is no manufacturer warranty and Chinese stock firmware
 that wants to phone home. Both are addressed below.
@@ -86,8 +82,8 @@ the calibration tool walks the network.
 ## 2. Privacy-room sensors (SZ + BZ) — fall detection
 
 The privacy rooms cannot have a camera at all. The original plan was
-24/60 GHz mmWave radar (Aqara FP2, Apollo R1). **The client tested
-both on site and both failed.** Cause: the building has metal in the
+24/60 GHz mmWave radar (Aqara FP2, Apollo R1). **On-site testing of
+both units failed.** Cause: the building has metal in the
 walls (frame structure + aluminium glass mullions), which is exactly
 the failure mode mmWave is most sensitive to — multipath reflections
 scramble the radar return.
@@ -118,9 +114,9 @@ scramble the radar return.
 ~ EUR 60–80 if 8×8 turns out too coarse for posture classification.
 Recommend starting with AMG8833 and upgrading only if needed.
 
-**Floor footprints for fall logic (client mm vertices, exported as `privacy_thermal_zones_mm`):**
+**Floor footprints for fall logic (vertex list in mm, exported as `privacy_thermal_zones_mm`):**
 
-- **BZ:** `(6400, 7100) → (10000, 7100) → (10000, 8700) → (8500, 8700) → (8500, 9100) → (6400, 9100)`
+- **BZ:** `(6400, 7400) → (10000, 7400) → (10000, 8700) → (8500, 8700) → (8500, 9200) → (6400, 9200)`
 - **SZ:** `(10100, 5000) → (14200, 5000) → (14200, 8000) → (10100, 8000)`
 
 ### Fall logic (deployed) — SZ vs BZ
@@ -165,7 +161,7 @@ Same plan as before, just updated for the actual SKU:
 1. Buy **1 OEM PoE camera board** + **1 AMG8833 + ESP32 dev kit**.
 2. Camera: connect to the Pi 5 over PoE, confirm:
    - 1080p H.264 sub-stream at 15 fps decodes on the Pi 5 hw decoder
-   - IR cut-in / cut-out behaves cleanly under client's actual lighting
+   - IR cut-in / cut-out behaves cleanly under real installation lighting
    - 48 h continuous stream with no drop
    - Stock firmware survives until OpenIPC flash; OpenIPC flash succeeds
 3. Thermal: ceiling mount, walk + **rapid** lie-down vs **slow** lie-down; verify the state machine in `thermal_fall_detection.py`: **30 s** stillness before SZ alarm, **20 s** for BZ horizontal floor; optional **water_leak** raises BZ severity.

@@ -1,9 +1,9 @@
 # Tracking + Re-ID Demo
 
-A single-file, single-camera demo of the multi-person tracking with persistent IDs
-that the production system will run on the Pi 5. Built so the client can **see
-the concept working today**, on a laptop with a webcam, without waiting for the
-WiFi cameras to be installed or the Pi 5 to be set up.
+A single-file, single-camera demo of multi-person tracking with persistent IDs,
+matching the production stack that targets Raspberry Pi 5. Use it on a laptop
+with a **webcam** to validate the end-to-end **concept** before RTSP cameras and
+edge hardware are wired up.
 
 ## What this demo IS
 

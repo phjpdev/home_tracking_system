@@ -302,7 +302,7 @@
       "type": "thermal-ir-grid",
       "model": "Panasonic AMG8833 Grid-EYE (8\u00d78 thermal) or MLX90640 32\u00d724",
       "purpose": "presence + fall detection (heat blob posture; not imaging)",
-      "rationale": "client tested mmWave (Aqara FP2, Apollo R1) \u2014 both fail due to metal in walls. Thermal IR is optical / RF-immune."
+      "rationale": "On-site mmWave (Aqara FP2, Apollo R1) failed due to metal in walls; thermal IR is optical and RF-immune."
     },
     "BZ": {
       "type": "thermal-ir-grid + water-leak",
