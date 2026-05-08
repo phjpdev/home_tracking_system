@@ -180,8 +180,8 @@ TRACKABLE_AREAS_MM: dict[str, list[tuple[int, int]]] = {
         ( 2500,           9200),
         ( 2500,           5000),
         (FIREPLACE_X_MM,  5000),
-        (FIREPLACE_X_MM,  7000),
-        ( 6300,           7000),
+        (FIREPLACE_X_MM,  7400),
+        ( 6300,           7400),
         ( 6300,           9200),
     ],
     "Yoga": [
@@ -214,12 +214,12 @@ TRACKABLE_AREAS_MM: dict[str, list[tuple[int, int]]] = {
 # ---------------------------------------------------------------------
 PRIVACY_THERMAL_ZONES_MM: dict[str, list[tuple[int, int]]] = {
     "BZ": [
-        (6400, 7100),
-        (10000, 7100),
+        (6400, 7400),
+        (10000, 7400),
         (10000, 8700),
         (8500, 8700),
-        (8500, 9100),
-        (6400, 9100),
+        (8500, 9200),
+        (6400, 9200),
     ],
     "SZ": [
         (10100, 5000),
@@ -420,7 +420,7 @@ CAMERAS = [
     {
         "id":       4,
         "name":     "cam_kwz_se",
-        "x_mm":     6300, "y_mm": 6900, "z_mm": CEILING_H_MM,
+        "x_mm":     6400, "y_mm": 7300, "z_mm": CEILING_H_MM,
         "yaw_deg":  330,
         "tilt_deg":  35,
         "fov_h_deg": 66,

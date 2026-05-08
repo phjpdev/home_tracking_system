@@ -45,11 +45,11 @@
         ],
         [
           10000,
-          7000
+          7400
         ],
         [
           6300,
-          7000
+          7400
         ],
         [
           6300,
@@ -74,11 +74,11 @@
       "privacy_thermal_polygon_mm": [
         [
           6400,
-          7100
+          7400
         ],
         [
           10000,
-          7100
+          7400
         ],
         [
           10000,
@@ -90,17 +90,17 @@
         ],
         [
           8500,
-          9100
+          9200
         ],
         [
           6400,
-          9100
+          9200
         ]
       ],
       "privacy_hardware_mounts_mm": {
         "thermal_ceiling_mount_mm": {
-          "x_mm": 8105,
-          "y_mm": 8027,
+          "x_mm": 8063,
+          "y_mm": 8215,
           "z_mm": 3000
         },
         "water_leak_floor_mount_mm": {
@@ -227,8 +227,8 @@
     },
     "BZ": {
       "thermal_ceiling_mount_mm": {
-        "x_mm": 8105,
-        "y_mm": 8027,
+        "x_mm": 8063,
+        "y_mm": 8215,
         "z_mm": 3000
       },
       "water_leak_floor_mount_mm": {
@@ -243,11 +243,11 @@
     "BZ": [
       [
         6400,
-        7100
+        7400
       ],
       [
         10000,
-        7100
+        7400
       ],
       [
         10000,
@@ -259,11 +259,11 @@
       ],
       [
         8500,
-        9100
+        9200
       ],
       [
         6400,
-        9100
+        9200
       ]
     ],
     "SZ": [
@@ -420,8 +420,8 @@
       "room": "K/WZ",
       "role": "Tracking (K/WZ middle-east on K/WZ-BZ frame, looks NW-ish into K/WZ + along BZ/SZ strip)",
       "mount": {
-        "x_mm": 6300,
-        "y_mm": 6900,
+        "x_mm": 6400,
+        "y_mm": 7300,
         "z_mm": 3000,
         "yaw_deg": 330,
         "tilt_deg": 35
