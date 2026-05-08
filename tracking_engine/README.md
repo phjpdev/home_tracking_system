@@ -8,7 +8,7 @@ Per-frame timings go to stderr (`grab`, `detect`, `track`, `geom`, `post`, `fram
 
 ## Install
 
-From the repository root (`camera_placement/`):
+From the repository root (`Tracking_System/`):
 
 ```bash
 pip install -r tracking_engine/requirements.txt
