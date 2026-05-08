@@ -49,4 +49,9 @@ def open_rtsp(url: str) -> OpenCvSource:
 def open_video(path: str) -> OpenCvSource:
     cap = cv2.VideoCapture(path)
     _configure_capture(cap, rtsp=False)
+    if not cap.isOpened():
+        cap.release()
+        raise OSError(
+            f"could not open video (missing path, permissions, or unsupported codec): {path!r}"
+        )
     return OpenCvSource(cap)

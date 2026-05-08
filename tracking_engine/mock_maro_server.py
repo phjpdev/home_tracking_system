@@ -9,15 +9,47 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 
+_GET_HELP = """\
+Mock Maro sink — this URL accepts POST only.
+
+Send JSON with Content-Type: application/json (same shape as the tracking engine POST body).
+
+Example:
+
+  curl -s -X POST http://127.0.0.1:8765/tracking/positions \\
+    -H "Content-Type: application/json" \\
+    -d '{"cam_id":"demo","ts":0,"persons":[]}'
+
+Open this page in a browser to confirm the server is up; run the tracking pipeline to receive real payloads.
+""".encode("utf-8")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "MockMaro/0.1"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
+    def _normalized_path(self) -> str:
+        return urlparse(self.path).path.rstrip("/") or "/"
+
+    def do_GET(self) -> None:
+        path = self._normalized_path()
+        if path == "/tracking/positions":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(_GET_HELP)))
+            self.end_headers()
+            self.wfile.write(_GET_HELP)
+            return
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
+        self.send_error(404, "not found")
+
     def do_POST(self) -> None:
-        parsed = urlparse(self.path)
-        if parsed.path.rstrip("/") != "/tracking/positions":
+        if self._normalized_path() != "/tracking/positions":
             self.send_error(404, "use POST /tracking/positions")
             return
         length = int(self.headers.get("Content-Length", "0"))

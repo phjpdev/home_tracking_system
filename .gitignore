@@ -1,2 +1,4 @@
 *.STEP
 *.step
+.venv/
+venv/

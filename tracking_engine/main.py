@@ -70,8 +70,20 @@ def run(cfg_path: Path, video_override: str | None) -> int:
 
     source: FrameSource
     if video_override:
-        print(f"[engine] video file: {video_override}", file=sys.stderr)
-        source = open_video(video_override)
+        vp = Path(video_override).expanduser()
+        if not vp.is_file():
+            print(
+                f"[engine] video file not found: {vp} "
+                f"(use a real path, not the README placeholder)",
+                file=sys.stderr,
+            )
+            return 2
+        print(f"[engine] video file: {vp}", file=sys.stderr)
+        try:
+            source = open_video(str(vp))
+        except OSError as e:
+            print(f"[engine] {e}", file=sys.stderr)
+            return 2
     else:
         if not rtsp_url:
             print("[engine] camera.rtsp_url empty and no --video", file=sys.stderr)
@@ -84,8 +96,16 @@ def run(cfg_path: Path, video_override: str | None) -> int:
         f"POST {poster.url} dry_run={poster.dry_run}",
         file=sys.stderr,
     )
+    if not poster.dry_run:
+        print(
+            "[engine] ensure the sink is running (e.g. "
+            "`python tracking_engine/mock_maro_server.py`) or set poster.dry_run: true",
+            file=sys.stderr,
+        )
 
     frame_i = 0
+    post_fail_last_log_frame = -10**9
+    post_refused_hint_shown = False
     try:
         while True:
             t_frame0 = time.perf_counter()
@@ -149,8 +169,24 @@ def run(cfg_path: Path, video_override: str | None) -> int:
 
             lat.record("frame_total", (time.perf_counter() - t_frame0) * 1000.0)
 
-            if persons and not ok_post:
-                print(f"[engine] POST failed: {err}", file=sys.stderr)
+            if ok_post:
+                post_refused_hint_shown = False
+            elif persons:
+                log_gap = max(log_every, 30)
+                if frame_i - post_fail_last_log_frame >= log_gap:
+                    post_fail_last_log_frame = frame_i
+                    print(f"[engine] POST failed: {err}", file=sys.stderr)
+                    if not post_refused_hint_shown and (
+                        "10061" in err
+                        or "actively refused" in err
+                        or "Connection refused" in err
+                    ):
+                        post_refused_hint_shown = True
+                        print(
+                            "[engine] connection refused: start the mock server on port 8765 "
+                            "(see message above) or enable poster.dry_run in config.yaml",
+                            file=sys.stderr,
+                        )
 
             frame_i += 1
             if log_every > 0 and frame_i % log_every == 0:
