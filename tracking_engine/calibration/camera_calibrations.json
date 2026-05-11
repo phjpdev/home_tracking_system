@@ -7,6 +7,66 @@
       "y_min": 5000,
       "y_max": 9200
     },
-    "_comment": "Phase C placeholder: linear map from image (u/W,v/H) to K/WZ-ish rectangle. Replace with homography from the calibration tool later."
+    "_comment": "K/WZ trackable polygon bounding box (mm). Replace with homography per camera after calibration."
+  },
+  "cam_kwz_nw": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 2500,
+      "x_max": 10000,
+      "y_min": 5000,
+      "y_max": 9200
+    },
+    "_comment": "Shared K/WZ dummy bounds until per-view homography exists."
+  },
+  "cam_kwz_ne": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 2500,
+      "x_max": 10000,
+      "y_min": 5000,
+      "y_max": 9200
+    },
+    "_comment": "Shared K/WZ dummy bounds until per-view homography exists."
+  },
+  "cam_kwz_se": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 2500,
+      "x_max": 10000,
+      "y_min": 5000,
+      "y_max": 9200
+    },
+    "_comment": "Shared K/WZ dummy bounds until per-view homography exists."
+  },
+  "cam_yoga_ne": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 14100,
+      "x_max": 17900,
+      "y_min": 5300,
+      "y_max": 8800
+    },
+    "_comment": "Yoga trackable rectangle from cameras_config.json rooms.Yoga.trackable_polygon_mm."
+  },
+  "cam_yoga_se": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 14100,
+      "x_max": 17900,
+      "y_min": 5300,
+      "y_max": 8800
+    },
+    "_comment": "Same Yoga bounds as sibling camera until homography."
+  },
+  "cam_hallway_n": {
+    "mode": "dummy",
+    "floor_bounds_mm": {
+      "x_min": 10100,
+      "x_max": 14000,
+      "y_min": 8000,
+      "y_max": 8700
+    },
+    "_comment": "Hallway trackable polygon bounding box from cameras_config.json."
   }
 }

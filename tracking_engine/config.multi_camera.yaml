@@ -1,0 +1,62 @@
+# Multi-camera tracking — uses camera names + rooms from ``camera_placement_plan/output/cameras_config.json``.
+#
+# Run from repo root:
+#   python -m tracking_engine.multi_camera --config tracking_engine/config.multi_camera.yaml
+#
+# Laptop replay (two streams share one clip):
+#   python -m tracking_engine.multi_camera --config tracking_engine/config.multi_camera.yaml \
+#     --video cam_kwz_sw=clip.mp4 --video cam_kwz_nw=clip.mp4
+
+multi_camera:
+  cameras_layout_file: ../camera_placement_plan/output/cameras_config.json
+  # When true (default), each RTSP uses a background grab thread that keeps only the latest frame.
+  use_latest_frame_rtsp: true
+  streams:
+    - name: cam_kwz_sw
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: true
+    - name: cam_kwz_nw
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: false
+    - name: cam_kwz_ne
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: false
+    - name: cam_kwz_se
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: false
+    - name: cam_yoga_ne
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: false
+    - name: cam_yoga_se
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: false
+    - name: cam_hallway_n
+      rtsp_url: rtsp://127.0.0.1:8554/live
+      enabled: false
+
+calibration_file: calibration/camera_calibrations.json
+
+detector:
+  backend: auto
+  yolo_weights: yolov8n.pt
+  hailo_hef: /usr/share/hailo-models/yolov8s_h8l.hef
+  conf: 0.4
+
+tracking:
+  zone: unknown
+  default_privacy: false
+
+poster:
+  url: http://127.0.0.1:8765/tracking/positions
+  timeout_sec: 3.0
+  dry_run: false
+  verify_tls: true
+  include_latency_in_post: false
+
+runtime:
+  show_preview: false
+  # Which layout camera name to visualize when ``show_preview: true`` (must be enabled in ``streams``).
+  show_preview_camera: cam_kwz_sw
+  latency_log_every_n_frames: 30
+  max_ticks: 0
+  preview_scale: 0.5

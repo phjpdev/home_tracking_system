@@ -4,6 +4,10 @@ Single-camera pipeline aligned with the project plan:
 
 **RTSP** (OpenCV + FFmpeg) → **YOLOv8n** (Hailo on Pi when available, else Ultralytics CPU) → **ByteTrack** → **foot-point → floor mm** (dummy linear map or `cv2`-style homography matrix) → **HTTP POST** JSON (same shape as `tracking_demo`).
 
+## Multi-camera
+
+See **[README_MULTI_CAMERA.md](README_MULTI_CAMERA.md)** — loads camera names and rooms from `camera_placement_plan/output/cameras_config.json`, runs one detector + per-camera ByteTrack, optional threaded RTSP grabs, and posts once per camera per tick (`python -m tracking_engine.multi_camera`).
+
 Per-frame timings go to stderr (`grab`, `detect`, `track`, `geom`, `post`, `frame_total`).
 
 ## Install

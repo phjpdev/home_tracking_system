@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
@@ -55,3 +57,49 @@ def open_video(path: str) -> OpenCvSource:
             f"could not open video (missing path, permissions, or unsupported codec): {path!r}"
         )
     return OpenCvSource(cap)
+
+
+class LatestRtspSource:
+    """Background thread continuously grabs RTSP frames; ``read()`` returns the freshest copy.
+
+    Drops backlog implicitly by overwriting the latest frame, which keeps latency closer to
+    real time when multiple cameras share one inference loop.
+    """
+
+    def __init__(self, url: str):
+        self._url = url
+        self._lock = threading.Lock()
+        self._frame: Optional[np.ndarray] = None
+        self._ready = False
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name=f"rtsp:{url[:48]}", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        cap = cv2.VideoCapture(self._url, cv2.CAP_FFMPEG)
+        _configure_capture(cap, rtsp=True)
+        try:
+            while not self._stop.is_set():
+                ok, frame = cap.read()
+                if ok and frame is not None:
+                    with self._lock:
+                        self._frame = frame
+                        self._ready = True
+                else:
+                    time.sleep(0.02)
+        finally:
+            cap.release()
+
+    def read(self) -> tuple[bool, Optional[np.ndarray]]:
+        with self._lock:
+            if not self._ready or self._frame is None:
+                return False, None
+            return True, self._frame.copy()
+
+    def release(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=8.0)
+
+
+def open_rtsp_latest(url: str) -> LatestRtspSource:
+    return LatestRtspSource(url)
