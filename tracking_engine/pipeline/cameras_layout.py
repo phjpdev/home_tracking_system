@@ -88,7 +88,21 @@ def resolve_active_streams(
         )
 
     if overrides:
-        unknown = ", ".join(sorted(overrides))
-        raise ValueError(f"--video specified for unknown camera names: {unknown}")
+        lines: list[str] = []
+        for n in sorted(overrides.keys()):
+            if n not in by_name:
+                lines.append(f"{n}: not in layout JSON")
+                continue
+            row = next((r for r in streams_yaml if r and str(r.get("name")) == n), None)
+            if row is None:
+                lines.append(f"{n}: add a multi_camera.streams row with this name")
+            elif not bool(row.get("enabled", True)):
+                lines.append(f"{n}: stream disabled in YAML (set enabled: true)")
+            else:
+                lines.append(f"{n}: unused override")
+
+        raise ValueError(
+            "--video names must match enabled streams:\n  " + "\n  ".join(lines)
+        )
 
     return active

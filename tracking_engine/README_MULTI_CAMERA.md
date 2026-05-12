@@ -43,7 +43,8 @@ python -m tracking_engine.multi_camera --config tracking_engine/config.multi_cam
   --video cam_kwz_nw=path/to/b.mp4
 ```
 
-`--video NAME=PATH` may be repeated; it overrides `rtsp_url` for that layout name only.
+`--video NAME=PATH` may be repeated; it overrides `rtsp_url` for that layout name only.  
+Each NAME must also have **`enabled: true`** under `multi_camera.streams` (disabled streams are skipped, so extra `--video` flags error).
 
 ### Preview window
 

@@ -17,22 +17,22 @@ multi_camera:
       enabled: true
     - name: cam_kwz_nw
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      enabled: true
     - name: cam_kwz_ne
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      enabled: true
     - name: cam_kwz_se
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      enabled: true
     - name: cam_yoga_ne
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      enabled: true
     - name: cam_yoga_se
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      enabled: true
     - name: cam_hallway_n
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      enabled: true
 
 calibration_file: calibration/camera_calibrations.json
 
