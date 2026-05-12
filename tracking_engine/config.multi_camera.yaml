@@ -20,19 +20,19 @@ multi_camera:
       enabled: true
     - name: cam_kwz_ne
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: true
+      enabled: false
     - name: cam_kwz_se
       rtsp_url: rtsp://127.0.0.1:8554/live
       enabled: true
     - name: cam_yoga_ne
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: true
+      enabled: false
     - name: cam_yoga_se
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: true
+      enabled: false
     - name: cam_hallway_n
       rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: true
+      enabled: false
 
 calibration_file: calibration/camera_calibrations.json
 
@@ -49,7 +49,7 @@ tracking:
 poster:
   url: http://127.0.0.1:8765/tracking/positions
   timeout_sec: 3.0
-  dry_run: false
+  dry_run: true
   verify_tls: true
   include_latency_in_post: false
 
