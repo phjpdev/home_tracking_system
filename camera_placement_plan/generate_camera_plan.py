@@ -42,7 +42,8 @@ Phase 1.5 placements (7 cameras):
                                     detection is delegated to a
                                     non-RF, non-imaging sensor: a
                                     low-resolution thermal IR grid
-                                    (Panasonic AMG8833 8x8 + ESPHome).
+                                    (MLX90640 32x24, 55 deg FOV, on an
+                                    Olimex ESP32-POE-ISO running ESPHome).
                                     On-site mmWave trials (Aqara FP2,
                                     Apollo R1) failed here due to metal
                                     in the wall assembly
@@ -272,6 +273,7 @@ BZ_WATER_LEAK_FLOOR_MOUNT_MM = {
     "x_mm": 7450,
     "y_mm": 8900,
     "z_mm": 0,
+    "wiring": "wired to BZ Olimex ESP32-POE-ISO GPIO (active-low pull-up)",
     "placement_note": (
         "Floor mount inside BZ thermal zone (L-tab). Adjust after site "
         "survey — target shower curb / wet drain path; used as secondary "
@@ -820,8 +822,8 @@ def export_config() -> None:
                             PRIVACY_THERMAL_CEILING_MOUNT_MM["SZ"]
                         ),
                         "mount_note": (
-                            "Ceiling-mounted AMG8833/MLX class grid; (x,y) is "
-                            "centroid of privacy_thermal_polygon_mm; "
+                            "Ceiling-mounted MLX90640 (32x24, 55 deg FOV); "
+                            "(x,y) is centroid of privacy_thermal_polygon_mm; "
                             "z = ceiling_height_mm."
                         ),
                     }
@@ -834,8 +836,9 @@ def export_config() -> None:
                             BZ_WATER_LEAK_FLOOR_MOUNT_MM
                         ),
                         "mount_note": (
-                            "Thermal: ceiling as SZ. Water leak: floor device "
-                            "(Zigbee); adjust xy after site survey inside "
+                            "Thermal: ceiling as SZ. Water leak: wired "
+                            "conductive probe to Olimex ESP32-POE-ISO GPIO; "
+                            "adjust xy after site survey inside "
                             "privacy_thermal_polygon_mm."
                         ),
                     }
@@ -886,30 +889,49 @@ def export_config() -> None:
         "privacy_room_sensors": {
             "SZ": {
                 "type": "thermal-ir-grid",
-                "model": (
-                    "Panasonic AMG8833 Grid-EYE (8×8 thermal) or MLX90640 32×24"
-                ),
+                "model": "MLX90640 (32x24, 55 deg FOV)",
+                "host": "Olimex ESP32-POE-ISO (ESPHome firmware)",
+                "transport": "MQTT over PoE",
+                "frame_rate_hz": 8,
+                "door_sensor": "wired NC magnetic reed switch (ESP32 GPIO)",
                 "purpose": (
                     "presence + fall detection (heat blob posture; not imaging)"
                 ),
                 "rationale": (
                     "On-site mmWave (Aqara FP2, Apollo R1) failed due to metal in "
-                    "walls; thermal IR is optical and RF-immune."
+                    "walls; thermal IR is optical and RF-immune. MLX90640 chosen "
+                    "over AMG8833 (8x8) for reliable posture inference."
                 ),
+                "mqtt_topics": {
+                    "thermal_frame":  "home/sz/thermal/frame",
+                    "door_state":     "home/sz/door/state",
+                    "node_heartbeat": "home/sz/node/heartbeat",
+                },
             },
             "BZ": {
-                "type": "thermal-ir-grid + water-leak",
+                "type": "thermal-ir-grid + wired-water-leak",
                 "model": (
-                    "Panasonic AMG8833 / MLX90640 + Aqara water leak sensor"
+                    "MLX90640 (32x24, 55 deg FOV) + wired conductive leak probe"
                 ),
+                "host": "Olimex ESP32-POE-ISO (ESPHome firmware)",
+                "transport": "MQTT over PoE",
+                "frame_rate_hz": 8,
+                "door_sensor": "wired NC magnetic reed switch (ESP32 GPIO)",
                 "purpose": (
                     "presence + fall detection; wet floor boosts shower-slip "
                     "confidence"
                 ),
                 "rationale": (
                     "same radar failure mode as SZ; thermal-on-floor + "
-                    "water-on-floor ⇒ very high confidence for shower falls."
+                    "water-on-floor => very high confidence for shower falls. "
+                    "Wired leak probe avoids Zigbee battery + range failure modes."
                 ),
+                "mqtt_topics": {
+                    "thermal_frame":  "home/bz/thermal/frame",
+                    "door_state":     "home/bz/door/state",
+                    "leak_state":     "home/bz/leak/state",
+                    "node_heartbeat": "home/bz/node/heartbeat",
+                },
             },
         },
         "cameras": [

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any, Protocol
 
 import numpy as np
@@ -18,6 +19,16 @@ class BodyEmbedder(Protocol):
 
     @property
     def dim(self) -> int: ...
+
+
+_FALLBACK_BANNER = (
+    "============================================================\n"
+    "[reid] WARNING: using FallbackBodyEmbedder (grayscale heuristic).\n"
+    "[reid] This is NOT production Re-ID and will confuse similar-looking people.\n"
+    "[reid] Configure reid.body.onnx_model_path in YAML to point at an OSNet ONNX\n"
+    "[reid] exported with tools/export_osnet_onnx.py.\n"
+    "============================================================"
+)
 
 
 def _l2_normalize_rows(x: np.ndarray) -> np.ndarray:
@@ -119,9 +130,24 @@ class OnnxBodyEmbedder:
 
 def create_body_embedder(cfg: ReidConfig) -> BodyEmbedder:
     if cfg.body_onnx_path is not None and cfg.body_onnx_path.is_file():
-        return OnnxBodyEmbedder(
-            str(cfg.body_onnx_path),
-            cfg.body_model_id,
-            cfg.body_dimension,
+        try:
+            return OnnxBodyEmbedder(
+                str(cfg.body_onnx_path),
+                cfg.body_model_id,
+                cfg.body_dimension,
+            )
+        except Exception as exc:
+            print(
+                f"[reid] ONNX embedder load failed for {cfg.body_onnx_path}: {exc}",
+                file=sys.stderr,
+            )
+            print(_FALLBACK_BANNER, file=sys.stderr)
+            return FallbackBodyEmbedder(cfg.body_model_id, cfg.body_dimension)
+
+    if cfg.body_onnx_path is not None:
+        print(
+            f"[reid] configured body.onnx_model_path does not exist: {cfg.body_onnx_path}",
+            file=sys.stderr,
         )
+    print(_FALLBACK_BANNER, file=sys.stderr)
     return FallbackBodyEmbedder(cfg.body_model_id, cfg.body_dimension)

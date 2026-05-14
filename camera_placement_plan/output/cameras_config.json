@@ -107,9 +107,10 @@
           "x_mm": 7450,
           "y_mm": 8900,
           "z_mm": 0,
+          "wiring": "wired to BZ Olimex ESP32-POE-ISO GPIO (active-low pull-up)",
           "placement_note": "Floor mount inside BZ thermal zone (L-tab). Adjust after site survey \u2014 target shower curb / wet drain path; used as secondary channel with ceiling thermal."
         },
-        "mount_note": "Thermal: ceiling as SZ. Water leak: floor device (Zigbee); adjust xy after site survey inside privacy_thermal_polygon_mm."
+        "mount_note": "Thermal: ceiling as SZ. Water leak: wired conductive probe to Olimex ESP32-POE-ISO GPIO; adjust xy after site survey inside privacy_thermal_polygon_mm."
       }
     },
     "SZ": {
@@ -148,7 +149,7 @@
           "y_mm": 6500,
           "z_mm": 3000
         },
-        "mount_note": "Ceiling-mounted AMG8833/MLX class grid; (x,y) is centroid of privacy_thermal_polygon_mm; z = ceiling_height_mm."
+        "mount_note": "Ceiling-mounted MLX90640 (32x24, 55 deg FOV); (x,y) is centroid of privacy_thermal_polygon_mm; z = ceiling_height_mm."
       }
     },
     "Yoga": {
@@ -235,6 +236,7 @@
         "x_mm": 7450,
         "y_mm": 8900,
         "z_mm": 0,
+        "wiring": "wired to BZ Olimex ESP32-POE-ISO GPIO (active-low pull-up)",
         "placement_note": "Floor mount inside BZ thermal zone (L-tab). Adjust after site survey \u2014 target shower curb / wet drain path; used as secondary channel with ceiling thermal."
       }
     }
@@ -300,15 +302,34 @@
   "privacy_room_sensors": {
     "SZ": {
       "type": "thermal-ir-grid",
-      "model": "Panasonic AMG8833 Grid-EYE (8\u00d78 thermal) or MLX90640 32\u00d724",
+      "model": "MLX90640 (32x24, 55 deg FOV)",
+      "host": "Olimex ESP32-POE-ISO (ESPHome firmware)",
+      "transport": "MQTT over PoE",
+      "frame_rate_hz": 8,
+      "door_sensor": "wired NC magnetic reed switch (ESP32 GPIO)",
       "purpose": "presence + fall detection (heat blob posture; not imaging)",
-      "rationale": "On-site mmWave (Aqara FP2, Apollo R1) failed due to metal in walls; thermal IR is optical and RF-immune."
+      "rationale": "On-site mmWave (Aqara FP2, Apollo R1) failed due to metal in walls; thermal IR is optical and RF-immune. MLX90640 chosen over AMG8833 (8x8) for reliable posture inference.",
+      "mqtt_topics": {
+        "thermal_frame": "home/sz/thermal/frame",
+        "door_state": "home/sz/door/state",
+        "node_heartbeat": "home/sz/node/heartbeat"
+      }
     },
     "BZ": {
-      "type": "thermal-ir-grid + water-leak",
-      "model": "Panasonic AMG8833 / MLX90640 + Aqara water leak sensor",
+      "type": "thermal-ir-grid + wired-water-leak",
+      "model": "MLX90640 (32x24, 55 deg FOV) + wired conductive leak probe",
+      "host": "Olimex ESP32-POE-ISO (ESPHome firmware)",
+      "transport": "MQTT over PoE",
+      "frame_rate_hz": 8,
+      "door_sensor": "wired NC magnetic reed switch (ESP32 GPIO)",
       "purpose": "presence + fall detection; wet floor boosts shower-slip confidence",
-      "rationale": "same radar failure mode as SZ; thermal-on-floor + water-on-floor \u21d2 very high confidence for shower falls."
+      "rationale": "same radar failure mode as SZ; thermal-on-floor + water-on-floor => very high confidence for shower falls. Wired leak probe avoids Zigbee battery + range failure modes.",
+      "mqtt_topics": {
+        "thermal_frame": "home/bz/thermal/frame",
+        "door_state": "home/bz/door/state",
+        "leak_state": "home/bz/leak/state",
+        "node_heartbeat": "home/bz/node/heartbeat"
+      }
     }
   },
   "cameras": [

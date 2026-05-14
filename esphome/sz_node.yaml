@@ -1,0 +1,76 @@
+# SZ (bedroom) privacy-zone node — Olimex ESP32-POE-ISO + MLX90640.
+#
+# Publishes:
+#   home/sz/thermal/frame   - JSON {"ts":..., "shape":[24,32], "temp_c":[...]}
+#   home/sz/door/state      - "open" | "closed"
+#   home/sz/node/heartbeat  - lifecycle blobs from common.yaml
+#
+# Flash:
+#   esphome run esphome/sz_node.yaml
+
+substitutions:
+  node_name: "sz-node"
+  room_code: "sz"
+  device_friendly: "SZ Privacy Node"
+
+<<: !include common.yaml
+
+# MLX90640 32x24 thermal IR grid (I2C @ 0x33).
+external_components:
+  - source: github://pr#5523
+    components: [mlx90640]
+    refresh: 1d
+
+mlx90640:
+  id: thermal_grid
+  address: 0x33
+  refresh_rate: 8Hz
+  resolution: 18bit
+
+# Reed switch for door state.
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO34
+      mode:
+        input: true
+        pullup: false
+    name: "SZ Door"
+    device_class: door
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+    on_press:
+      then:
+        - mqtt.publish:
+            topic: home/sz/door/state
+            payload: "open"
+            retain: true
+    on_release:
+      then:
+        - mqtt.publish:
+            topic: home/sz/door/state
+            payload: "closed"
+            retain: true
+
+# Thermal frame publisher (8 Hz).
+interval:
+  - interval: 125ms
+    then:
+      - lambda: |-
+          auto frame = id(thermal_grid).get_temperatures();
+          if (frame.size() != 768) return;
+          std::string s = "{\"ts\":";
+          s += std::to_string((double) (millis()) / 1000.0);
+          s += ",\"shape\":[24,32],\"temp_c\":[";
+          for (size_t i = 0; i < frame.size(); ++i) {
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.2f", frame[i]);
+            s += buf;
+            if (i + 1 < frame.size()) s += ",";
+          }
+          s += "]}";
+          id(mqtt_client).publish("home/sz/thermal/frame", s);
+
+mqtt:
+  id: mqtt_client

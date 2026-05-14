@@ -4,7 +4,7 @@
 
 **Camera hardware (production-locked):** OEM PoE IP camera board (HiSilicon-class SoC + Sony image sensor, 1080p+ H.264/H.265 RTSP, IRCUT, IR LEDs, M12 2.8 mm lens). Seven placements plus one spare. See [docs/FINAL_CAMERA_SELECTION.md](docs/FINAL_CAMERA_SELECTION.md).
 
-**Privacy-room sensors:** Panasonic AMG8833 8×8 thermal IR grid in SZ + BZ for non-imaging fall detection (RF-immune). Aqara water-leak sensor in BZ as a secondary channel. Same FastAPI/MQTT pipeline as the cameras.
+**Privacy-room sensors:** MLX90640 (32×24, 55° FOV) thermal IR grid in SZ + BZ on Olimex ESP32-POE-ISO running ESPHome, for non-imaging fall detection (RF-immune). Wired conductive water-leak probe in BZ as a secondary channel. Same FastAPI/MQTT pipeline as the cameras. See [../plan/MASTER_PLAN.md](../plan/MASTER_PLAN.md) section 6 for the migration rationale (AMG8833 8×8 → MLX90640 32×24) and [../esphome/README.md](../esphome/README.md) for the ESP32 firmware.
 
 **Building envelope:** 19.8 m × 10.2 m floor-plan footprint (reference: `ZB Baugruppe TMH2.STEP`), ceiling 3.0 m. Tracked regions include K/WZ, Yoga, and the hallway strip defined in `TRACKABLE_AREAS_MM["Hallway"]`.
 

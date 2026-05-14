@@ -27,11 +27,20 @@ class ReidConfig:
     min_aspect: float
     max_aspect: float
     face_enabled: bool
+    face_detector_onnx_path: Optional[Path]
+    face_embedder_onnx_path: Optional[Path]
+    face_dimension: int
+    face_model_id: str
+    face_threshold_high: float
+    face_min_face_size: int
+    face_min_frontal_score: float
+    face_encryption_key_path: Optional[Path]
     max_prototypes_per_identity: int
     min_quality_to_store: float
     dedup_distance: float
     max_writes_per_minute: int
     tentative_to_confirmed_frames: int
+    conflict_grace_seconds: float
     mapping_ttl_sec: float
     ema_reset_gap_sec: float
 
@@ -76,7 +85,25 @@ class ReidConfig:
         max_aspect = float(body.get("max_aspect", 4.0))
 
         face = r.get("face") or {}
-        face_enabled = bool(face.get("enabled", False)) if isinstance(face, dict) else False
+        if not isinstance(face, dict):
+            face = {}
+        face_enabled = bool(face.get("enabled", False))
+        face_model_id = str(face.get("model_id", "arcface_mfn_v1"))
+        face_dimension = int(face.get("dimension", 128))
+        face_threshold_high = float(face.get("threshold_high", 0.45))
+        face_min_face_size = int(face.get("min_face_size", 80))
+        face_min_frontal_score = float(face.get("min_frontal_score", 0.6))
+
+        def _resolve_optional(raw: Any) -> Optional[Path]:
+            if not raw:
+                return None
+            p = Path(str(raw))
+            return p if p.is_absolute() else (cfg_dir / p).resolve()
+
+        face_detector_path = _resolve_optional(face.get("detector_onnx_path"))
+        face_embedder_path = _resolve_optional(face.get("embedder_onnx_path"))
+        face_key_path_raw = face.get("encryption_key_path")
+        face_key_path = Path(str(face_key_path_raw)) if face_key_path_raw else None
 
         gallery = r.get("gallery") or {}
         if not isinstance(gallery, dict):
@@ -90,6 +117,7 @@ class ReidConfig:
         if not isinstance(fusion, dict):
             fusion = {}
         tentative_to_confirmed_frames = int(fusion.get("tentative_to_confirmed_frames", 15))
+        conflict_grace_seconds = float(fusion.get("conflict_grace_seconds", 5.0))
         mapping_ttl_sec = float(fusion.get("mapping_ttl_sec", 5.0))
         ema_reset_gap_sec = float(fusion.get("ema_reset_gap_sec", 2.0))
 
@@ -112,11 +140,20 @@ class ReidConfig:
             min_aspect=min_aspect,
             max_aspect=max_aspect,
             face_enabled=face_enabled,
+            face_detector_onnx_path=face_detector_path,
+            face_embedder_onnx_path=face_embedder_path,
+            face_dimension=face_dimension,
+            face_model_id=face_model_id,
+            face_threshold_high=face_threshold_high,
+            face_min_face_size=face_min_face_size,
+            face_min_frontal_score=face_min_frontal_score,
+            face_encryption_key_path=face_key_path,
             max_prototypes_per_identity=max_prototypes_per_identity,
             min_quality_to_store=min_quality_to_store,
             dedup_distance=dedup_distance,
             max_writes_per_minute=max_writes_per_minute,
             tentative_to_confirmed_frames=tentative_to_confirmed_frames,
+            conflict_grace_seconds=conflict_grace_seconds,
             mapping_ttl_sec=mapping_ttl_sec,
             ema_reset_gap_sec=ema_reset_gap_sec,
         )

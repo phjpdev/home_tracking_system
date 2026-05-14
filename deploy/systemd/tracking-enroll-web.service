@@ -1,0 +1,26 @@
+[Unit]
+Description=Tracking system enrollment web UI
+After=network-online.target tracking-engine.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tracking
+Group=tracking
+WorkingDirectory=/opt/tracking-system
+Environment=PYTHONUNBUFFERED=1
+Environment=TRACKING_CONFIG=/opt/tracking-system/tracking_engine/config.multi_camera.yaml
+ExecStart=/opt/tracking-system/.venv/bin/uvicorn tracking_engine.enroll_web.app:app \
+    --host 0.0.0.0 --port 8088
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -48,10 +48,30 @@ tracking:
 
 poster:
   url: http://127.0.0.1:8765/tracking/positions
+  events_url: http://127.0.0.1:8765/tracking/events
   timeout_sec: 3.0
   dry_run: true
   verify_tls: true
   include_latency_in_post: false
+
+# Phase C — thermal pipeline. ``python -m tracking_engine.thermal.run`` reads
+# this same YAML and the ``multi_camera.cameras_layout_file`` for geometry.
+thermal:
+  enabled: false
+  dry_run: true
+  mqtt:
+    host: 127.0.0.1
+    port: 1883
+    user: tracking
+    password: change-me
+    topic_prefix: home
+  rooms: [SZ, BZ]
+  detection:
+    event_throttle_sec: 30.0
+    body_temp_min_c: 28.0
+    body_temp_max_c: 38.5
+    motion_threshold_normalized: 0.02
+    background_alpha: 0.02
 
 runtime:
   show_preview: false
@@ -61,8 +81,21 @@ runtime:
   max_ticks: 0
   preview_scale: 0.5
 
+observability:
+  log_level: INFO
+  log_dir: null            # null -> stderr; set e.g. /var/log/tracking-engine
+  log_json: null           # null -> auto (json under systemd, console otherwise)
+  metrics_enabled: false
+  metrics_bind: 0.0.0.0
+  metrics_port: 9100       # multi-camera tracker
+  metrics_port_thermal: 9101  # thermal pipeline
+
 # Phase A body Re-ID: SQLite + FAISS gallery, global_id on POST. Set ``enabled: true`` and install ``faiss-cpu``.
-# Optional: ``body.onnx_model_path`` for an OSNet-style ONNX (input BCHW RGB 0..1). Otherwise a lightweight OpenCV fallback embedding is used (not production Re-ID).
+# Body embedder:
+#   - Production: export OSNet via ``python tools/export_osnet_onnx.py --out tracking_engine/models/osnet_x025.onnx --quantize tracking_engine/models/osnet_x025_int8.onnx``
+#     then set ``body.onnx_model_path: models/osnet_x025_int8.onnx`` (path is relative to this YAML).
+#   - Dev fallback: leave ``onnx_model_path: null`` and a deterministic grayscale embedder is used
+#     (not production Re-ID; the startup log will print a loud warning).
 reid:
   enabled: false
   backend: sqlite_faiss
@@ -71,10 +104,17 @@ reid:
   tenant_id: default
   face:
     enabled: false
+    detector_onnx_path: models/scrfd_500mf.onnx
+    embedder_onnx_path: models/arcface_mfn.onnx
+    dimension: 128
+    threshold_high: 0.45
+    min_face_size: 80
+    min_frontal_score: 0.6
+    encryption_key_path: /etc/tracking-engine/secret.key
   body:
     model_id: osnet_x025_v1
     dimension: 512
-    onnx_model_path: null
+    onnx_model_path: models/osnet_x025_int8.onnx
     threshold_match: 0.35
     threshold_high: 0.20
     ema_alpha: 0.3

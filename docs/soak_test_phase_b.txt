@@ -1,0 +1,39 @@
+Phase B soak-test log template
+===============================
+
+Fill in once both privacy-zone nodes are installed.
+
+Date: _________________
+Operator: _____________
+
+[ ] SZ node powered via PoE, ethernet link LED solid
+[ ] BZ node powered via PoE, ethernet link LED solid
+[ ] mosquitto_sub on Pi sees `home/sz/node/heartbeat` = "online"
+[ ] mosquitto_sub on Pi sees `home/bz/node/heartbeat` = "online"
+
+8 Hz thermal frame check (run for >= 30 minutes):
+    mosquitto_sub -h 127.0.0.1 -u tracking -P <pw> \
+      -t 'home/+/thermal/frame' | wc -l
+    expected: ~30 * 60 * 8 * 2 nodes = ~28800 frames
+
+SZ frame count over 30 min: ________
+BZ frame count over 30 min: ________
+
+Door reed latency (manual trigger, eyeball):
+SZ door open  -> MQTT "open"   within ___ ms (target <= 250)
+SZ door close -> MQTT "closed" within ___ ms (target <= 250)
+BZ door open  -> MQTT "open"   within ___ ms (target <= 250)
+BZ door close -> MQTT "closed" within ___ ms (target <= 250)
+
+BZ leak probe (wet sponge):
+trigger     -> MQTT "wet" within ___ ms (target <= 500)
+dry         -> MQTT "dry" within ___ ms (target <= 5000)
+
+6-hour soak:
+[ ] no `offline` heartbeat
+[ ] no MQTT reconnects logged in Mosquitto journalctl
+[ ] no MLX90640 driver errors in ESPHome OTA log
+
+Notes:
+______________________________________________________________
+______________________________________________________________

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -13,6 +14,7 @@ from typing import Any, Optional
 import numpy as np
 
 from .config import ReidConfig
+from .crypto import FaceEmbeddingCrypto, maybe_load_crypto
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,14 @@ class BodyNeighbor:
     similarity: float
     appearance_id: int
     global_track_id: Optional[str]
+
+
+@dataclass(frozen=True)
+class FaceNeighbor:
+    distance: float
+    similarity: float
+    face_embedding_id: int
+    identity_id: str
 
 
 class GallerySqliteFaiss:
@@ -33,16 +43,28 @@ class GallerySqliteFaiss:
 
         self._sqlite_path = str(cfg.sqlite_path)
         self._dim = cfg.body_dimension
+        self._face_dim = cfg.face_dimension
         self._conn = sqlite3.connect(self._sqlite_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL;")
+        self._conn.execute("PRAGMA foreign_keys=ON;")
         self._conn.row_factory = sqlite3.Row
         self._ensure_schema()
         self._register_body_model(cfg.body_model_id, cfg.body_dimension)
+        if cfg.face_enabled:
+            self._register_face_model(cfg.face_model_id, cfg.face_dimension)
 
         base = faiss.IndexFlatIP(self._dim)
         self._index = faiss.IndexIDMap2(base)
 
+        base_face = faiss.IndexFlatIP(self._face_dim)
+        self._face_index = faiss.IndexIDMap2(base_face)
+
+        self._crypto: Optional[FaceEmbeddingCrypto] = maybe_load_crypto(
+            cfg.face_encryption_key_path if cfg.face_enabled else None
+        )
+
         self._rebuild_body_index_locked()
+        self._rebuild_face_index_locked()
 
     def close(self) -> None:
         with self._lock:
@@ -114,6 +136,45 @@ class GallerySqliteFaiss:
               model_ids TEXT NOT NULL,
               FOREIGN KEY (identity_id) REFERENCES identity (identity_id)
             );
+
+            CREATE TABLE IF NOT EXISTS face_embedding (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              identity_id TEXT NOT NULL,
+              embedding BLOB NOT NULL,
+              encrypted INTEGER NOT NULL DEFAULT 0,
+              model_id TEXT NOT NULL,
+              quality REAL,
+              enrolled INTEGER NOT NULL DEFAULT 0,
+              cam_id TEXT,
+              frame_ts REAL,
+              metadata TEXT,
+              created_at REAL NOT NULL,
+              FOREIGN KEY (identity_id) REFERENCES identity (identity_id) ON DELETE CASCADE,
+              FOREIGN KEY (model_id) REFERENCES model_registry (model_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS face_embedding_model_idx
+              ON face_embedding (model_id, identity_id);
+
+            CREATE TABLE IF NOT EXISTS consent_record (
+              identity_id TEXT PRIMARY KEY,
+              lawful_basis TEXT NOT NULL,
+              granted_at REAL NOT NULL,
+              revoked_at REAL,
+              retention_days INTEGER,
+              FOREIGN KEY (identity_id) REFERENCES identity (identity_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS sighting (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              global_track_id TEXT NOT NULL,
+              cam_id TEXT NOT NULL,
+              started_ts REAL NOT NULL,
+              ended_ts REAL,
+              best_body_embedding_id INTEGER,
+              notes TEXT,
+              FOREIGN KEY (global_track_id) REFERENCES global_track (global_track_id)
+            );
             """
         )
         self._conn.commit()
@@ -124,6 +185,17 @@ class GallerySqliteFaiss:
             """
             INSERT OR IGNORE INTO model_registry(model_id, modality, dimension, metric, deprecated, created_at)
             VALUES (?, 'body', ?, 'cosine', 0, ?)
+            """,
+            (model_id, dimension, now),
+        )
+        self._conn.commit()
+
+    def _register_face_model(self, model_id: str, dimension: int) -> None:
+        now = time.time()
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO model_registry(model_id, modality, dimension, metric, deprecated, created_at)
+            VALUES (?, 'face', ?, 'cosine', 0, ?)
             """,
             (model_id, dimension, now),
         )
@@ -420,8 +492,264 @@ class GallerySqliteFaiss:
             )
             self._conn.commit()
 
-    def query_face(self, _vec: np.ndarray, _k: int) -> list[BodyNeighbor]:
-        return []
+    # ----------------------- Face gallery -----------------------
+
+    def _rebuild_face_index_locked(self) -> None:
+        self._face_index.reset()
+        model_id = self.cfg.face_model_id
+        if not self.cfg.face_enabled:
+            return
+        rows = self._conn.execute(
+            """
+            SELECT id, embedding, encrypted FROM face_embedding
+            WHERE model_id = ?
+            ORDER BY id
+            """,
+            (model_id,),
+        ).fetchall()
+        if not rows:
+            return
+
+        import faiss
+
+        mats: list[np.ndarray] = []
+        ids: list[int] = []
+        for r in rows:
+            fid = int(r["id"])
+            blob = r["embedding"]
+            encrypted = int(r["encrypted"]) == 1
+            try:
+                vec = self._decode_face_blob(blob, encrypted)
+            except Exception as exc:
+                print(f"[gallery] skip face_embedding id={fid}: {exc}", file=sys.stderr)
+                continue
+            v = vec.astype(np.float32).reshape(1, -1).copy()
+            faiss.normalize_L2(v)
+            mats.append(v)
+            ids.append(fid)
+
+        if mats:
+            x = np.vstack(mats)
+            ids_arr = np.array(ids, dtype=np.int64)
+            self._face_index.add_with_ids(x, ids_arr)
+
+    def rebuild_face_index(self) -> None:
+        with self._lock:
+            self._rebuild_face_index_locked()
+
+    def _decode_face_blob(self, blob: bytes, encrypted: bool) -> np.ndarray:
+        if encrypted:
+            if self._crypto is None:
+                raise RuntimeError("face embedding is encrypted but no key is loaded")
+            return self._crypto.decrypt(blob, self._face_dim)
+        return np.frombuffer(blob, dtype=np.float32).copy()
+
+    def _encode_face_vec(self, vec: np.ndarray) -> tuple[bytes, int]:
+        if self._crypto is not None:
+            return self._crypto.encrypt(vec), 1
+        return vec.astype(np.float32, copy=False).tobytes(), 0
+
+    def insert_face(
+        self,
+        *,
+        identity_id: str,
+        embedding: np.ndarray,
+        quality: Optional[float],
+        cam_id: Optional[str],
+        frame_ts: Optional[float],
+        enrolled: bool,
+    ) -> int:
+        if not self.cfg.face_enabled:
+            raise RuntimeError("face support is disabled in config")
+        if embedding.ndim != 1 or embedding.shape[0] != self._face_dim:
+            raise ValueError("face embedding vector shape mismatch")
+        blob, enc_flag = self._encode_face_vec(embedding)
+        now = time.time()
+        with self._lock:
+            cur = self._conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO face_embedding(
+                  identity_id, embedding, encrypted, model_id, quality,
+                  enrolled, cam_id, frame_ts, metadata, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    identity_id,
+                    blob,
+                    enc_flag,
+                    self.cfg.face_model_id,
+                    quality,
+                    1 if enrolled else 0,
+                    cam_id,
+                    frame_ts,
+                    "{}",
+                    now,
+                ),
+            )
+            row_id = int(cur.lastrowid)
+            v = embedding.astype(np.float32, copy=False).reshape(1, -1).copy()
+            self._faiss.normalize_L2(v)
+            self._face_index.add_with_ids(v, np.array([row_id], dtype=np.int64))
+            self._conn.commit()
+        return row_id
+
+    def query_face(self, vec: np.ndarray, k: int) -> list[FaceNeighbor]:
+        if not self.cfg.face_enabled:
+            return []
+        if vec.ndim != 1:
+            vec = vec.reshape(-1)
+        if vec.shape[0] != self._face_dim:
+            return []
+        q = vec.astype(np.float32).reshape(1, -1).copy()
+        self._faiss.normalize_L2(q)
+        with self._lock:
+            if self._face_index.ntotal == 0:
+                return []
+            probe = min(self._face_index.ntotal, max(k + 16, 32))
+            sims, fids = self._face_index.search(q, probe)
+            sim_row = sims[0].tolist()
+            id_row = fids[0].tolist()
+
+            grouped: dict[str, tuple[float, int]] = {}
+            for sim, rid in zip(sim_row, id_row):
+                rid_i = int(rid)
+                if rid_i < 0:
+                    continue
+                sim_f = float(np.clip(sim, -1.0, 1.0))
+                dist = max(0.0, min(2.0, 1.0 - sim_f))
+                row = self._conn.execute(
+                    "SELECT identity_id FROM face_embedding WHERE id = ?",
+                    (rid_i,),
+                ).fetchone()
+                if row is None or row["identity_id"] is None:
+                    continue
+                pid = str(row["identity_id"])
+                prev = grouped.get(pid)
+                if prev is None or dist < prev[0]:
+                    grouped[pid] = (dist, rid_i)
+
+        out: list[FaceNeighbor] = [
+            FaceNeighbor(
+                distance=pair[0],
+                similarity=max(-1.0, min(1.0, 1.0 - pair[0])),
+                face_embedding_id=pair[1],
+                identity_id=pid,
+            )
+            for pid, pair in grouped.items()
+        ]
+        out.sort(key=lambda x: x.distance)
+        return out[:k]
+
+    # ----------------------- Identity + consent -----------------------
+
+    def create_identity(
+        self,
+        *,
+        display_name: str,
+        tenant_id: str,
+        site_id: Optional[str] = None,
+        enrolled: bool = True,
+    ) -> str:
+        identity_id = str(uuid.uuid4())
+        now = time.time()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO identity(
+                  identity_id, tenant_id, site_id, display_name,
+                  status, enrolled, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+                """,
+                (
+                    identity_id,
+                    tenant_id,
+                    site_id,
+                    display_name,
+                    1 if enrolled else 0,
+                    now,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return identity_id
+
+    def list_identities(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT i.identity_id, i.display_name, i.tenant_id, i.enrolled,
+                       i.created_at,
+                       c.lawful_basis, c.granted_at, c.revoked_at, c.retention_days,
+                       (SELECT COUNT(*) FROM face_embedding f WHERE f.identity_id = i.identity_id) AS face_count
+                FROM identity i
+                LEFT JOIN consent_record c ON c.identity_id = i.identity_id
+                WHERE i.status = 'active'
+                ORDER BY i.created_at ASC
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert_consent(
+        self,
+        *,
+        identity_id: str,
+        lawful_basis: str,
+        retention_days: Optional[int] = None,
+        granted_at: Optional[float] = None,
+    ) -> None:
+        ts = float(granted_at) if granted_at is not None else time.time()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO consent_record(identity_id, lawful_basis, granted_at, revoked_at, retention_days)
+                VALUES (?, ?, ?, NULL, ?)
+                ON CONFLICT(identity_id) DO UPDATE SET
+                  lawful_basis = excluded.lawful_basis,
+                  granted_at = excluded.granted_at,
+                  revoked_at = NULL,
+                  retention_days = excluded.retention_days
+                """,
+                (identity_id, lawful_basis, ts, retention_days),
+            )
+            self._conn.commit()
+
+    def revoke_consent(self, identity_id: str) -> None:
+        ts = time.time()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE consent_record SET revoked_at = ? WHERE identity_id = ?",
+                (ts, identity_id),
+            )
+            self._conn.commit()
+
+    def delete_identity(self, identity_id: str) -> dict[str, int]:
+        """Hard delete: cascades to face_embedding + consent_record + clears links."""
+        with self._lock:
+            face_n = self._conn.execute(
+                "SELECT COUNT(*) AS c FROM face_embedding WHERE identity_id = ?",
+                (identity_id,),
+            ).fetchone()["c"]
+            appearance_n = self._conn.execute(
+                "SELECT COUNT(*) AS c FROM appearance_embedding WHERE identity_id = ?",
+                (identity_id,),
+            ).fetchone()["c"]
+            self._conn.execute(
+                "UPDATE appearance_embedding SET identity_id = NULL WHERE identity_id = ?",
+                (identity_id,),
+            )
+            self._conn.execute(
+                "UPDATE global_track SET identity_id = NULL, status = 'tentative' "
+                "WHERE identity_id = ?",
+                (identity_id,),
+            )
+            # ON DELETE CASCADE handles face_embedding + consent_record.
+            self._conn.execute("DELETE FROM identity WHERE identity_id = ?", (identity_id,))
+            self._conn.commit()
+            self._rebuild_face_index_locked()
+        return {"face_embeddings": int(face_n), "appearance_embeddings_unlinked": int(appearance_n)}
 
     def get_track_snapshot(self, global_track_id: str) -> tuple[str, Optional[str]]:
         """Return (status, identity_id or None) from persisted global_track row."""

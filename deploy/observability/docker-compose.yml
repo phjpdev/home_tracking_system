@@ -1,0 +1,31 @@
+# Optional: local Prometheus + Grafana for the operator.
+# Run on the Pi (or any LAN host) with `docker compose up -d`.
+#
+# Prereqs:
+#   sudo apt install -y docker.io docker-compose-plugin
+#
+# Open http://<host-ip>:3000 (admin/admin on first login).
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana-oss:10.4.4
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+
+volumes:
+  prom-data:
+  grafana-data:

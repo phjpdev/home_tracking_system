@@ -1,0 +1,99 @@
+# BZ (bathroom) privacy-zone node — Olimex ESP32-POE-ISO + MLX90640 + wired leak probe.
+#
+# Publishes:
+#   home/bz/thermal/frame   - JSON {"ts":..., "shape":[24,32], "temp_c":[...]}
+#   home/bz/door/state      - "open" | "closed"
+#   home/bz/leak/state      - "wet"  | "dry"
+#   home/bz/node/heartbeat  - lifecycle blobs from common.yaml
+#
+# Flash:
+#   esphome run esphome/bz_node.yaml
+
+substitutions:
+  node_name: "bz-node"
+  room_code: "bz"
+  device_friendly: "BZ Privacy Node"
+
+<<: !include common.yaml
+
+external_components:
+  - source: github://pr#5523
+    components: [mlx90640]
+    refresh: 1d
+
+mlx90640:
+  id: thermal_grid
+  address: 0x33
+  refresh_rate: 8Hz
+  resolution: 18bit
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO34
+      mode:
+        input: true
+        pullup: false
+    name: "BZ Door"
+    device_class: door
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+    on_press:
+      then:
+        - mqtt.publish:
+            topic: home/bz/door/state
+            payload: "open"
+            retain: true
+    on_release:
+      then:
+        - mqtt.publish:
+            topic: home/bz/door/state
+            payload: "closed"
+            retain: true
+
+  - platform: gpio
+    pin:
+      number: GPIO35
+      mode:
+        input: true
+        pullup: false
+      inverted: true
+    name: "BZ Leak Probe"
+    device_class: moisture
+    filters:
+      - delayed_on: 200ms
+      - delayed_off: 5000ms
+    on_press:
+      then:
+        - mqtt.publish:
+            topic: home/bz/leak/state
+            payload: "wet"
+            retain: true
+    on_release:
+      then:
+        - mqtt.publish:
+            topic: home/bz/leak/state
+            payload: "dry"
+            retain: true
+
+interval:
+  - interval: 125ms
+    then:
+      - lambda: |-
+          auto frame = id(thermal_grid).get_temperatures();
+          if (frame.size() != 768) return;
+          std::string s = "{\"ts\":";
+          s += std::to_string((double) (millis()) / 1000.0);
+          s += ",\"shape\":[24,32],\"temp_c\":[";
+          for (size_t i = 0; i < frame.size(); ++i) {
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.2f", frame[i]);
+            s += buf;
+            if (i + 1 < frame.size()) s += ",";
+          }
+          s += "]}";
+          id(mqtt_client).publish("home/bz/thermal/frame", s);
+
+mqtt:
+  id: mqtt_client

@@ -12,6 +12,7 @@ from typing import Any, Optional
 import cv2
 import yaml
 
+from .observability import configure_logging, metrics, start_metrics_server
 from .pipeline.cameras_layout import load_cameras_layout, resolve_active_streams
 from .pipeline.detector import create_detector
 from .pipeline.homography import foot_point_to_mm, load_calibration
@@ -71,6 +72,18 @@ def _open_source(
 def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     cfg = _load_yaml(cfg_path)
     cfg_dir = cfg_path.parent
+
+    obs_cfg = cfg.get("observability", {}) or {}
+    configure_logging(
+        level=str(obs_cfg.get("log_level", "INFO")),
+        log_dir=obs_cfg.get("log_dir"),
+        json=obs_cfg.get("log_json"),
+    )
+    if bool(obs_cfg.get("metrics_enabled", False)):
+        start_metrics_server(
+            port=int(obs_cfg.get("metrics_port", 9100)),
+            addr=str(obs_cfg.get("metrics_bind", "0.0.0.0")),
+        )
 
     mc = cfg.get("multi_camera") or {}
     layout_rel = str(mc.get("cameras_layout_file", "")).strip()
@@ -167,10 +180,18 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
         except Exception as exc:
             print(f"[multi] re-id disabled: init failed ({exc})", file=sys.stderr)
         else:
+            backend = reid.embedder_backend()
             print(
-                f"[multi] re-id on embedder={reid.embedder_backend()} gallery={reid_cfg.sqlite_path}",
+                f"[multi] re-id on embedder={backend} gallery={reid_cfg.sqlite_path}",
                 file=sys.stderr,
             )
+            if backend == "fallback_opencv":
+                print(
+                    "[multi] WARNING: re-id is using the grayscale fallback embedder; "
+                    "global IDs will be unreliable. Export OSNet to ONNX via "
+                    "tools/export_osnet_onnx.py and set reid.body.onnx_model_path.",
+                    file=sys.stderr,
+                )
             if reid_cfg.face_enabled:
                 print(
                     "[multi] reid.face.enabled is True but facial recognition fusion is "
@@ -327,6 +348,10 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             lat_all.record("detect", sum_detect)
             lat_all.record("track", sum_track)
             lat_all.record("geom", sum_geom)
+            metrics.inference_latency_ms.labels(stage="grab").observe(sum_grab)
+            metrics.inference_latency_ms.labels(stage="detect").observe(sum_detect)
+            metrics.inference_latency_ms.labels(stage="track").observe(sum_track)
+            metrics.inference_latency_ms.labels(stage="geom").observe(sum_geom)
 
             sum_post = 0.0
             latency_snapshot: dict[str, float] | None = None
@@ -344,11 +369,21 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                 ok_post, err = poster.post(payload)
                 sum_post += (time.perf_counter() - t_post0) * 1000.0
                 if not ok_post and payload.get("persons"):
+                    metrics.post_failures.labels(endpoint="positions").inc()
                     if first_post_err is None:
                         first_post_err = err or "unknown error"
+                for p in payload.get("persons", []):
+                    if "reid_score" in p:
+                        metrics.body_match_score.observe(float(p["reid_score"]))
+                    if "face_score" in p:
+                        metrics.face_match_score.observe(float(p["face_score"]))
 
             lat_all.record("post", sum_post)
             lat_all.record("frame_total", (time.perf_counter() - t_tick0) * 1000.0)
+            metrics.inference_latency_ms.labels(stage="post").observe(sum_post)
+            metrics.inference_latency_ms.labels(stage="frame_total").observe(
+                (time.perf_counter() - t_tick0) * 1000.0
+            )
 
             if first_post_err is not None:
                 log_gap = max(log_every, 30)

@@ -1,0 +1,63 @@
+# Common ESPHome fragments for the privacy-zone nodes.
+# Both sz_node.yaml and bz_node.yaml ``<<:`` this file to share wiring.
+#
+# Wiring conventions (Olimex ESP32-POE-ISO):
+#   GPIO_RST     = boot button (unused for sensors)
+#   I2C SDA      = GPIO13
+#   I2C SCL      = GPIO16
+#   Reed switch  = GPIO34 (input-only, external 10k pull-up to 3V3)
+#   Leak probe   = GPIO35 (BZ only, input-only, external 10k pull-up)
+#
+# Power: 802.3af PoE via the Olimex board; no local PSU.
+#
+# Secrets live in ``secrets.yaml`` (not committed). Required keys:
+#   mqtt_broker, mqtt_user, mqtt_password, ota_password, ap_password
+
+# Substitutions overridden in the per-room YAML.
+substitutions:
+  node_name: "privacy-node"
+  room_code: "xx"
+  device_friendly: "Privacy Node"
+
+esphome:
+  name: ${node_name}
+  friendly_name: ${device_friendly}
+
+esp32:
+  board: esp32-poe-iso
+  framework:
+    type: arduino
+
+logger:
+  level: INFO
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# Wired ethernet over the Olimex PoE PHY.
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk_mode: GPIO17_OUT
+  phy_addr: 0
+  power_pin: GPIO12
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_user
+  password: !secret mqtt_password
+  birth_message:
+    topic: home/${room_code}/node/heartbeat
+    payload: '{"state":"online"}'
+  will_message:
+    topic: home/${room_code}/node/heartbeat
+    payload: '{"state":"offline"}'
+  log_topic: null
+
+i2c:
+  sda: GPIO13
+  scl: GPIO16
+  scan: true
+  frequency: 400kHz

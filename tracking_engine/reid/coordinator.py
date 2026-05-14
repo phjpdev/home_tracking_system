@@ -9,8 +9,10 @@ from typing import Any, Optional
 import numpy as np
 
 from .config import ReidConfig
-from .crop_quality import assess_crop_quality, person_crop
-from .embed import BodyEmbedder, create_body_embedder
+from .crop_quality import assess_crop_quality, clipped_head_bbox, person_crop
+from .embed import BodyEmbedder, OnnxBodyEmbedder, create_body_embedder
+from .face_embed import FaceStack, maybe_create_face_stack
+from .fusion import FaceFusionEngine
 from .gallery_sqlite import BodyNeighbor, GallerySqliteFaiss
 
 
@@ -34,6 +36,18 @@ class ReIDCoordinator:
         self.cfg = cfg
         self.gallery = GallerySqliteFaiss(cfg)
         self._embedder: BodyEmbedder = create_body_embedder(cfg)
+        self._face: Optional[FaceStack] = maybe_create_face_stack(
+            enabled=cfg.face_enabled,
+            detector_onnx_path=str(cfg.face_detector_onnx_path) if cfg.face_detector_onnx_path else None,
+            embedder_onnx_path=str(cfg.face_embedder_onnx_path) if cfg.face_embedder_onnx_path else None,
+            dimension=cfg.face_dimension,
+            min_face_size=cfg.face_min_face_size,
+            min_frontal_score=cfg.face_min_frontal_score,
+        )
+        self._fusion = FaceFusionEngine(
+            threshold_high=cfg.face_threshold_high,
+            conflict_grace_seconds=cfg.conflict_grace_seconds,
+        )
         self._map: dict[tuple[str, str], _LocalAssoc] = {}
         self._alive_this_tick: set[tuple[str, str]] = set()
         self._writes: deque[float] = deque()
@@ -42,9 +56,7 @@ class ReIDCoordinator:
         self.gallery.close()
 
     def embedder_backend(self) -> str:
-        if self.cfg.body_onnx_path and self.cfg.body_onnx_path.is_file():
-            return "onnx"
-        return "fallback_opencv"
+        return "onnx" if isinstance(self._embedder, OnnxBodyEmbedder) else "fallback_opencv"
 
     def begin_tick(self) -> None:
         self._alive_this_tick.clear()
@@ -58,6 +70,10 @@ class ReIDCoordinator:
         ]
         for key in dead:
             del self._map[key]
+            self._fusion.remove(key)
+
+    def face_enabled(self) -> bool:
+        return self._face is not None
 
     def observe(
         self,
@@ -201,11 +217,23 @@ class ReIDCoordinator:
             nn_probe = self.gallery.query_body(assoc.ema, 1)
             nearest_dist_out = float(nn_probe[0].distance) if nn_probe else None
 
-        return self._extras_for_assoc(
+        face_score = self._maybe_fuse_face(
+            cam_id=cam_id,
+            label=label,
+            frame_bgr=frame_bgr,
+            xyxy=xyxy,
+            frame_ts=frame_ts,
+            assoc=assoc,
+        )
+
+        extras = self._extras_for_assoc(
             assoc=assoc,
             label=label,
             nearest_distance=nearest_dist_out,
         )
+        if face_score is not None:
+            extras["face_score"] = round(float(face_score), 4)
+        return extras
 
     def _extras_for_assoc(
         self,
@@ -230,6 +258,7 @@ class ReIDCoordinator:
             out["identity_id"] = pid
             if pname:
                 out["identity_name"] = pname
+                out["track_state"] = "linked"
 
         if nearest_distance is not None:
             out["reid_score"] = round(float(nearest_distance), 4)
@@ -238,6 +267,76 @@ class ReIDCoordinator:
             out["local_id"] = label
 
         return out
+
+    def _maybe_fuse_face(
+        self,
+        *,
+        cam_id: str,
+        label: str,
+        frame_bgr: np.ndarray,
+        xyxy: tuple[float, float, float, float],
+        frame_ts: float,
+        assoc: _LocalAssoc,
+    ) -> Optional[float]:
+        if self._face is None:
+            return None
+        if assoc.local_track_state != "confirmed":
+            return None
+
+        fh, fw = frame_bgr.shape[:2]
+        hx1, hy1, hx2, hy2 = clipped_head_bbox(xyxy, fh, fw)
+        if hx2 <= hx1 or hy2 <= hy1:
+            return None
+        head_crop = frame_bgr[hy1:hy2, hx1:hx2]
+        if head_crop.size == 0:
+            return None
+
+        face_res = self._face.detect_and_embed_head(head_crop)
+        face_match_pid: Optional[str] = None
+        face_match_dist: Optional[float] = None
+        if face_res is not None:
+            neighbors = self.gallery.query_face(face_res.embedding, k=3)
+            if neighbors:
+                face_match_pid = neighbors[0].identity_id
+                face_match_dist = float(neighbors[0].distance)
+
+        key = (cam_id, label)
+        new_state, identity_id, events = self._fusion.process(
+            key,
+            face_match_identity_id=face_match_pid,
+            face_match_distance=face_match_dist,
+            body_state=assoc.local_track_state,
+            ts=float(frame_ts),
+        )
+
+        if identity_id is not None:
+            db_pid, _ = self.gallery.get_track_snapshot(str(assoc.global_id))
+            if db_pid != "linked":
+                self.gallery.link_track_to_identity(
+                    str(assoc.global_id),
+                    identity_id,
+                    tenant_id=self.cfg.tenant_id,
+                    scores={"face": face_match_dist or 0.0},
+                )
+
+        for ev in events:
+            self.gallery.log_fusion_event(
+                event_type=ev["event_type"],
+                global_track_id=str(assoc.global_id),
+                identity_id=ev.get("identity_id"),
+                body_score=ev.get("body_score"),
+                face_score=ev.get("face_score"),
+                threshold_snapshot={
+                    "face_threshold_high": self.cfg.face_threshold_high,
+                    "body_threshold_match": self.cfg.threshold_match,
+                },
+                model_ids={
+                    "body": self.cfg.body_model_id,
+                    "face": self.cfg.face_model_id,
+                },
+            )
+
+        return face_match_dist
 
     def _writes_allowed(self, ts: float) -> bool:
         window_sec = 60.0
