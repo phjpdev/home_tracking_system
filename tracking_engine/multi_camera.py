@@ -19,6 +19,7 @@ from .pipeline.ingest import FrameSource, open_rtsp, open_rtsp_latest, open_vide
 from .pipeline.latency import LatencyMonitor
 from .pipeline.poster import PositionPoster
 from .pipeline.tracker_bytetrack import ByteTracker
+from .reid import ReidConfig, ReIDCoordinator
 
 ROOT = Path(__file__).resolve().parent
 
@@ -158,6 +159,25 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             file=sys.stderr,
         )
 
+    reid_cfg = ReidConfig.from_cfg(cfg, cfg_dir)
+    reid: Optional[ReIDCoordinator] = None
+    if reid_cfg.enabled:
+        try:
+            reid = ReIDCoordinator(reid_cfg)
+        except Exception as exc:
+            print(f"[multi] re-id disabled: init failed ({exc})", file=sys.stderr)
+        else:
+            print(
+                f"[multi] re-id on embedder={reid.embedder_backend()} gallery={reid_cfg.sqlite_path}",
+                file=sys.stderr,
+            )
+            if reid_cfg.face_enabled:
+                print(
+                    "[multi] reid.face.enabled is True but facial recognition fusion is "
+                    "not wired yet — body embeddings only.",
+                    file=sys.stderr,
+                )
+
     tick = 0
     post_fail_last_log_tick = -10**9
     post_refused_hint_shown = False
@@ -176,6 +196,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
     try:
         while True:
+            if reid is not None:
+                reid.begin_tick()
             t_tick0 = time.perf_counter()
             ts = time.time()
             sum_grab = sum_detect = sum_track = sum_geom = 0.0
@@ -217,6 +239,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                 t_geom0 = time.perf_counter()
                 fh, fw = frame.shape[:2]
 
+                extra_by_tid: dict[int, dict[str, Any]] = {}
                 if tracked.tracker_id is None or len(tracked) == 0:
                     sum_geom += (time.perf_counter() - t_geom0) * 1000.0
                 else:
@@ -229,15 +252,24 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                         foot_u = (x1 + x2) / 2.0
                         foot_v = y2
                         x_mm, y_mm = foot_point_to_mm(calibration, foot_u, foot_v, fw, fh)
-                        persons.append(
-                            {
-                                "id": f"t{int(tid)}",
-                                "x": int(round(x_mm)),
-                                "y": int(round(y_mm)),
-                                "zone": zone,
-                                "privacy": default_privacy,
-                            }
-                        )
+                        person_row: dict[str, Any] = {
+                            "id": f"t{int(tid)}",
+                            "x": int(round(x_mm)),
+                            "y": int(round(y_mm)),
+                            "zone": zone,
+                            "privacy": default_privacy,
+                        }
+                        if reid is not None:
+                            rex = reid.observe(
+                                cam_id=cam_id,
+                                frame_ts=float(ts),
+                                frame_bgr=frame,
+                                xyxy=(x1, y1, x2, y2),
+                                tracker_id=int(tid),
+                            )
+                            extra_by_tid[int(tid)] = rex
+                            person_row.update(rex)
+                        persons.append(person_row)
                     sum_geom += (time.perf_counter() - t_geom0) * 1000.0
 
                 pending_payloads.append(
@@ -257,6 +289,12 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                                 continue
                             x1, y1, x2, y2 = [int(v) for v in tracked.xyxy[i]]
                             label = f"t{int(tid)}"
+                            ex = extra_by_tid.get(int(tid))
+                            gid = None
+                            if ex is not None:
+                                gid = ex.get("global_id")
+                            if gid is not None:
+                                label = f"{label}:{str(gid)[:8]}"
                             cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 200, 0), 2)
                             cv2.putText(
                                 vis,
@@ -278,6 +316,9 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                     cv2.imshow("tracking_engine_multi", vis)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         raise KeyboardInterrupt
+
+            if reid is not None:
+                reid.prune_stale(ts)
 
             if video_eof_stop:
                 break
@@ -349,6 +390,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             except Exception:
                 pass
         poster.close()
+        if reid is not None:
+            reid.close()
         if det_cleanup:
             det_cleanup()
 

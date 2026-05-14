@@ -60,3 +60,37 @@ runtime:
   latency_log_every_n_frames: 30
   max_ticks: 0
   preview_scale: 0.5
+
+# Phase A body Re-ID: SQLite + FAISS gallery, global_id on POST. Set ``enabled: true`` and install ``faiss-cpu``.
+# Optional: ``body.onnx_model_path`` for an OSNet-style ONNX (input BCHW RGB 0..1). Otherwise a lightweight OpenCV fallback embedding is used (not production Re-ID).
+reid:
+  enabled: false
+  backend: sqlite_faiss
+  dsn: sqlite:///reid_gallery.db
+  faiss_path: reid_gallery.faiss
+  tenant_id: default
+  face:
+    enabled: false
+  body:
+    model_id: osnet_x025_v1
+    dimension: 512
+    onnx_model_path: null
+    threshold_match: 0.35
+    threshold_high: 0.20
+    ema_alpha: 0.3
+    top_k: 5
+    min_bbox_area: 4000
+    min_blur_var: 50
+    min_aspect: 1.5
+    max_aspect: 4.0
+  gallery:
+    max_prototypes_per_identity: 30
+    min_quality_to_store: 0.7
+    dedup_distance: 0.05
+    max_writes_per_minute: 60
+  fusion:
+    tentative_to_confirmed_frames: 15
+    conflict_grace_seconds: 5
+    auto_merge_max_gap_seconds: 30
+    mapping_ttl_sec: 5.0
+    ema_reset_gap_sec: 2.0
