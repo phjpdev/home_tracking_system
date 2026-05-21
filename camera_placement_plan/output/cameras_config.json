@@ -1,5 +1,29 @@
 {
   "phase": "1.5-prototype-poe",
+  "as_built_measurements_2026_05_21": {
+    "_doc": "Tape-measured by the installer (CKiekhoefel) on 2026-05-21. Authoritative for calibration; supersedes any architect-plan dimension below where they disagree. Units: cm. The room polygons further down are the architect's plan (mm in envelope frame) and may be re-fitted in a future iteration to match these numbers exactly.",
+    "rooms_cm": {
+      "K_WZ": {
+        "long_axis": 781,
+        "narrow_part_width": 252,
+        "quadratic_part": [388, 288],
+        "note": "L-shape. Quadratic part (~kitchen/dining) is to-furniture, not wall-to-wall: kitchen counter and oven block ~130cm of room depth on the wall side."
+      },
+      "BZ": [375, 173],
+      "SZ": [410, 308],
+      "Hallway": [309, 87],
+      "Yoga": [353, 363]
+    },
+    "camera_mount_height_cm": {
+      "cam_kwz_sw": 245,
+      "cam_kwz_nw": 246,
+      "cam_kwz_ne": 245,
+      "cam_kwz_se": 245,
+      "cam_yoga_ne": 245,
+      "cam_yoga_se": 246,
+      "cam_hallway_n": 246
+    }
+  },
   "coordinate_system": {
     "origin": "NW corner of the floor-plan envelope (top-left)",
     "x_axis": "east (+x = right on plan)",
@@ -341,7 +365,7 @@
       "mount": {
         "x_mm": 2600,
         "y_mm": 9100,
-        "z_mm": 3000,
+        "z_mm": 2450,
         "yaw_deg": 330,
         "tilt_deg": 35
       },
@@ -375,7 +399,7 @@
       "mount": {
         "x_mm": 2600,
         "y_mm": 5700,
-        "z_mm": 3000,
+        "z_mm": 2460,
         "yaw_deg": 25,
         "tilt_deg": 35
       },
@@ -409,7 +433,7 @@
       "mount": {
         "x_mm": 6200,
         "y_mm": 5400,
-        "z_mm": 3000,
+        "z_mm": 2450,
         "yaw_deg": 155,
         "tilt_deg": 35
       },
@@ -443,7 +467,7 @@
       "mount": {
         "x_mm": 6400,
         "y_mm": 7300,
-        "z_mm": 3000,
+        "z_mm": 2450,
         "yaw_deg": 330,
         "tilt_deg": 35
       },
@@ -477,7 +501,7 @@
       "mount": {
         "x_mm": 17800,
         "y_mm": 5400,
-        "z_mm": 3000,
+        "z_mm": 2450,
         "yaw_deg": 155,
         "tilt_deg": 35
       },
@@ -511,7 +535,7 @@
       "mount": {
         "x_mm": 14200,
         "y_mm": 8700,
-        "z_mm": 3000,
+        "z_mm": 2460,
         "yaw_deg": 330,
         "tilt_deg": 35
       },
@@ -545,7 +569,7 @@
       "mount": {
         "x_mm": 14100,
         "y_mm": 8200,
-        "z_mm": 3000,
+        "z_mm": 2460,
         "yaw_deg": 180,
         "tilt_deg": 35
       },

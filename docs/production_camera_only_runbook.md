@@ -215,33 +215,176 @@ The shipped `tracking_engine/calibration/camera_calibrations.json` uses
 room polygon. **Real production needs a real homography per camera**, or
 the (x_mm, y_mm) you POST is meaningless.
 
-Open `camera_placement_plan/floor_plan.png` next to the calibration
-window so you can read off floor coordinates.
+### 3.0 Where to run the tool
 
-For each camera:
+Calibration **opens a GUI window**. The Pi is headless and X11
+forwarding over Tailscale is too laggy to click pixels accurately —
+calibrate on your **laptop** against the saved stills, then push the
+JSON back to the Pi.
 
-```bash
-cd /opt/tracking-system
-sudo -u tracking ./.venv/bin/python tools/calibrate_homography.py \
-    --camera cam_kwz_sw \
-    --image /tmp/stills/cam_kwz_sw.png
+The stills already have any per-camera `rotate:` applied
+(`probe_rtsp.py` honours the field), so a homography computed against
+the laptop still matches what the engine sees at runtime.
+
+```powershell
+# from your Windows laptop
+mkdir stills
+scp pi@maro-head.tail79e96b.ts.net:/tmp/stills_fixed/*.png .\stills\
 ```
 
-Click **at least 4** floor-plane points spread across the visible floor:
-door sills, parquet seams, table-leg footprints, room corners — anything
-you can locate on both the image and the floor plan in millimetres.
-After each click, type the corresponding `x_mm y_mm` (from the floor
-plan, origin = NW corner). When you have ≥ 4 points, press `c` to
-compute the homography. Aim for a mean reprojection residual under
-~150 mm; if it is larger, press `r` and re-pick points with better
-spread.
+### 3.1 As-built dimensions from the site (ground truth)
 
-Repeat for all 7 cameras. The script merges into
-`tracking_engine/calibration/camera_calibrations.json` per camera; other
-entries are preserved.
+Tape-measured by the installer on 2026-05-21; this overrides any
+discrepancy in the architect-derived polygons. Units below are
+centimetres.
 
-> Tip: if a camera's `mount.tilt_deg` or yaw changes (someone bumps it),
-> re-run calibration for that camera only.
+| Room | Floor extent (cm) | Note |
+|------|-------------------|------|
+| K/WZ | L-shape: 781 long × 252 narrow; quadratic part 388 × 288 | "quadratic" = kitchen/dining; **measured to kitchen furniture, not wall** (wall is ~130 cm farther) |
+| BZ   | 375 × 173 | no camera (privacy zone) |
+| SZ   | 410 × 308 | no camera (privacy zone) |
+| Hallway | 309 × 87 | one camera, looks west |
+| Yoga | 353 × 363 | two cameras |
+
+| Camera | Mount height (cm) |
+|--------|-------------------|
+| `cam_kwz_sw`, `cam_kwz_ne`, `cam_kwz_se`, `cam_yoga_ne` | 245 |
+| `cam_kwz_nw`, `cam_yoga_se`, `cam_hallway_n` | 246 |
+
+The same data is stored under
+`as_built_measurements_2026_05_21` at the top of
+`camera_placement_plan/output/cameras_config.json` so it is available
+programmatically.
+
+### 3.2 Coordinate frame and per-room anchor table
+
+Keep the **envelope NW corner** as `(0, 0)` (no code change, no
+re-rendering of the placement plan). For tape-measure work, anchor on
+a room's interior NW corner and add a known offset to get the global
+coordinate.
+
+| Room   | NW interior corner in envelope frame (mm) | Room east extent (mm, +x) | Room south extent (mm, +y) |
+|--------|------------------------------------------|---------------------------|----------------------------|
+| K/WZ   | **(2500, 5000)** | 7810 along long axis (to far end of L) | 2880 in quadratic part / 2520 in narrow part |
+| Hallway | **(10100, 8000)** | 3090 | 870 |
+| Yoga   | **(14100, 5300)** | 3530 | 3630 |
+
+If the client says *"tape mark in K/WZ is 1.5 m east + 0.8 m south of
+the K/WZ NW corner"*, the global mm coords are
+`(2500 + 1500, 5000 + 800) = (4000, 5800)`. That is what you type into
+the calibration tool.
+
+### 3.3 Per-camera procedure on your laptop
+
+For each camera, from the repo root:
+
+```powershell
+python tools\calibrate_homography.py `
+    --camera cam_kwz_sw `
+    --image stills\cam_kwz_sw.png `
+    --out tracking_engine\calibration\camera_calibrations.json
+```
+
+Then in the window that pops up:
+
+1. Look at the still and pick **4–6 floor-plane landmarks** spread
+   across the visible floor (not all in a line). Good landmarks:
+   - room corners where two walls meet the floor,
+   - door thresholds,
+   - the base of fixed installations (kitchen counter, oven plinth) —
+     these are at the **client's "to-furniture" measurement**, not the
+     wall, and that is fine as long as the offset you type matches.
+2. Left-click each landmark in the still. After every click, the
+   terminal prompts for `x_mm y_mm` — type the global envelope
+   coordinate (computed from the anchor table above).
+3. Press **`c`** once you have ≥ 4 points. The tool prints the **mean
+   reprojection residual in mm**.
+4. Quality bands:
+
+   | Residual (mm) | Verdict |
+   |---------------|---------|
+   | < 150 | great — save and move on |
+   | 150 – 250 | acceptable for v1 |
+   | > 250 | re-pick (press `r`) with more spread, or ask the client to add tape markers |
+
+5. Repeat for all 7 cameras: `cam_kwz_sw`, `cam_kwz_nw`, `cam_kwz_ne`,
+   `cam_kwz_se`, `cam_yoga_ne`, `cam_yoga_se`, `cam_hallway_n`. The
+   tool merges into the same JSON file.
+
+### 3.4 What to look for in each of the 7 stills
+
+These notes pair with the 2026-05-21 stills. You may need to rotate
+your screen 90° to read foot-of-wall lines clearly in the wide-angle
+images.
+
+| Camera | Where it looks | Easy floor landmarks visible in the still |
+|--------|---------------|-------------------------------------------|
+| `cam_kwz_sw` | from K/WZ SW corner, NE into kitchen/dining | base of kitchen counter (south wall side), oven plinth corner, the round-table area floor (use the table's footprint to triangulate) |
+| `cam_kwz_nw` | from K/WZ NW corner, SE across the living area | corner where curtain wall meets floor, edge of orange sofa base (note: sofa moves, prefer the wall–floor line), threshold at far end (BZ door) |
+| `cam_kwz_ne` | from the K/WZ-east frame, SW into K/WZ | wall–floor corner behind the round table, base of the ladder (a temporary fixture — do **not** rely on it once construction is done), inner corner where K/WZ narrows toward BZ |
+| `cam_kwz_se` | from middle-east, NW into K/WZ along the BZ frame | the floor strip running west, the visible pipe stubs near BZ (their floor exit points have known coordinates from the BZ leak-mount line), curtain–floor seam |
+| `cam_yoga_ne` | from Yoga NE, SW into Yoga | wall–floor corner at far end (Yoga SW), curtain rail's floor projection (only if curtain reaches floor), edge of the yellow sofa base |
+| `cam_yoga_se` | from Yoga SW (SZ-Yoga frame), NE into Yoga + threshold | the threshold line into the hallway (this is the **Yoga ↔ Hallway boundary**, useful for cross-camera consistency), inner door frame foot |
+| `cam_hallway_n` | hallway east end, looking west | both door thresholds along the corridor, both wall–floor lines (corridor width is 87 cm — use that to anchor scale) |
+
+The two highest-leverage points across the whole site are the
+**Yoga–Hallway threshold** and the **Hallway–K/WZ threshold**: those
+should land at the same global (x, y) regardless of which of the two
+neighbouring cameras you click them in. Use that as a cross-camera
+sanity check after step 3.3 finishes.
+
+### 3.5 When the residual is too high or a still has no clear landmarks
+
+Some of the construction-phase stills have plywood walls, no
+furniture, and no obvious floor markings. For those cameras, ask the
+client to put **four pieces of painter's tape on the floor** in the
+camera's footprint, then for each tape send back two numbers: distance
+east + distance south from a wall corner you and they have agreed on.
+Convert with the anchor table in §3.2 and re-run §3.3 for that one
+camera.
+
+A tape marker takes ≤ 5 minutes per camera and reliably gets residuals
+under 100 mm.
+
+### 3.6 Push the calibration back to the Pi
+
+```powershell
+scp tracking_engine\calibration\camera_calibrations.json `
+    pi@maro-head.tail79e96b.ts.net:/tmp/camera_calibrations.json
+```
+
+On the Pi:
+
+```bash
+sudo install -o tracking -g tracking -m 0644 /tmp/camera_calibrations.json \
+    /opt/tracking-system/tracking_engine/calibration/camera_calibrations.json
+sudo systemctl restart tracking-engine
+journalctl -u tracking-engine -n 50 -f
+```
+
+Or, preferred for production: commit the file in git, push, and re-run
+`sudo bash deploy/scripts/install.sh` on the Pi (the installer rsyncs
+`/opt/tracking-system/`).
+
+### 3.7 End-to-end sanity check
+
+With the mock sink running on the Pi (`mock_maro_server.py`) or
+`poster.dry_run: true`, walk through each room and watch the JSON. For
+every step:
+
+- printed `(x, y)` should stay inside the room polygon for that
+  camera's `cam_id`,
+- walking east → `x` increases, walking south → `y` increases,
+- consecutive ticks should not jump by more than ~500 mm during a
+  steady walk.
+
+Any of those failing → re-run `calibrate_homography.py` for that
+camera with more, better-spread points.
+
+> Tip: if a camera's `mount.tilt_deg` or yaw changes (someone bumps
+> it), re-run calibration for that camera only — `cv2.findHomography`
+> only fits the camera you point it at and the JSON merge keeps the
+> other six entries intact.
 
 ## 4. Body Re-ID model (OSNet ONNX)
 
