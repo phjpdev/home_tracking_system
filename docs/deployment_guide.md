@@ -3,6 +3,11 @@
 End-to-end install on the Raspberry Pi 5 in the house. Companion to
 [../plan/MASTER_PLAN.md](../plan/MASTER_PLAN.md) section 13.
 
+> **First deployment, camera-only?** Follow
+> [production_camera_only_runbook.md](production_camera_only_runbook.md)
+> instead — it walks through the same steps but skips the privacy-zone
+> hardware and face enrolment that haven't shipped yet.
+
 ## 1. Physical install
 
 Per [../camera_placement_plan/README.md](../camera_placement_plan/README.md).
@@ -74,10 +79,22 @@ Copy all three ONNX files to `/opt/tracking-system/tracking_engine/models/` on t
 
 ## 6. Calibrate cameras
 
-Per the homography tool in [../tracking_engine/pipeline/homography.py](../tracking_engine/pipeline/homography.py).
-Results live in [../tracking_engine/calibration/camera_calibrations.json](../tracking_engine/calibration/camera_calibrations.json).
+Use the interactive tool in [../tools/calibrate_homography.py](../tools/calibrate_homography.py)
+to compute a homography per camera. It supports either an RTSP grab or
+a saved still and writes the matrix into
+[../tracking_engine/calibration/camera_calibrations.json](../tracking_engine/calibration/camera_calibrations.json),
+which is the file the runtime reads via
+[../tracking_engine/pipeline/homography.py](../tracking_engine/pipeline/homography.py).
 
-Re-run after any furniture or camera move that changes ground points.
+```bash
+sudo -u tracking ./.venv/bin/python tools/calibrate_homography.py \
+    --camera cam_kwz_sw \
+    --rtsp rtsp://<camera-ip>:554/live/sub
+```
+
+Click ≥ 4 floor-plane points spread across the visible floor and supply
+their `x_mm y_mm` from `camera_placement_plan/floor_plan.png`. Re-run
+after any furniture or camera move that changes the ground references.
 
 ## 7. Configure
 
@@ -163,6 +180,8 @@ With face enrolled, `identity_name` appears next to confirmed tracks.
 | Live metrics | `http://<pi-ip>:9100/metrics`, plug into Grafana |
 | Backups | `/var/backups/tracking-engine/YYYY-MM-DD/` (cron at 03:30) |
 | Retention purge | `/var/log/syslog` for `[purge]` lines (cron at 03:45) |
+| Probe RTSP streams | `python tools/probe_rtsp.py` |
+| Inspect gallery DB | `python -m tracking_engine.tools.inspect_gallery` |
 | List identities | `python -m tracking_engine.tools.list_identities` |
 | Delete identity (GDPR erasure) | `python -m tracking_engine.tools.delete_identity --id <uuid>` |
 | Revoke consent | `python -m tracking_engine.tools.revoke_consent --id <uuid>` |

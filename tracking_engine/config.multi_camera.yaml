@@ -11,28 +11,31 @@ multi_camera:
   cameras_layout_file: ../camera_placement_plan/output/cameras_config.json
   # When true (default), each RTSP uses a background grab thread that keeps only the latest frame.
   use_latest_frame_rtsp: true
+  # Production deploy: replace the rtsp_url placeholders with the LAN IPs of the
+  # 7 PoE cameras and toggle ``enabled`` per stream you want active.
+  # Sub-stream (640x480 @ 15 fps) is recommended for the Pi 5 detector.
   streams:
     - name: cam_kwz_sw
-      rtsp_url: rtsp://127.0.0.1:8554/live
+      rtsp_url: rtsp://CAMERA_IP_1:554/live/sub
       enabled: true
     - name: cam_kwz_nw
-      rtsp_url: rtsp://127.0.0.1:8554/live
+      rtsp_url: rtsp://CAMERA_IP_2:554/live/sub
       enabled: true
     - name: cam_kwz_ne
-      rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      rtsp_url: rtsp://CAMERA_IP_3:554/live/sub
+      enabled: true
     - name: cam_kwz_se
-      rtsp_url: rtsp://127.0.0.1:8554/live
+      rtsp_url: rtsp://CAMERA_IP_4:554/live/sub
       enabled: true
     - name: cam_yoga_ne
-      rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      rtsp_url: rtsp://CAMERA_IP_5:554/live/sub
+      enabled: true
     - name: cam_yoga_se
-      rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      rtsp_url: rtsp://CAMERA_IP_6:554/live/sub
+      enabled: true
     - name: cam_hallway_n
-      rtsp_url: rtsp://127.0.0.1:8554/live
-      enabled: false
+      rtsp_url: rtsp://CAMERA_IP_7:554/live/sub
+      enabled: true
 
 calibration_file: calibration/camera_calibrations.json
 
@@ -47,6 +50,8 @@ tracking:
   default_privacy: false
 
 poster:
+  # Point at the live Maro service once it is reachable. Until then keep
+  # ``dry_run: true`` so the engine logs payloads without HTTP failures.
   url: http://127.0.0.1:8765/tracking/positions
   events_url: http://127.0.0.1:8765/tracking/events
   timeout_sec: 3.0

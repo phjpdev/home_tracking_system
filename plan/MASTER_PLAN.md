@@ -645,6 +645,10 @@ The deployment guide must describe how the operator handles:
 | Fall detection algorithm | [camera_placement_plan/thermal_fall_detection.py](camera_placement_plan/thermal_fall_detection.py) |
 | Mock Maro server | [tracking_engine/mock_maro_server.py](tracking_engine/mock_maro_server.py) |
 | Main config | [tracking_engine/config.multi_camera.yaml](tracking_engine/config.multi_camera.yaml) |
+| Homography calibration tool | [tools/calibrate_homography.py](tools/calibrate_homography.py) |
+| RTSP probe / discovery | [tools/probe_rtsp.py](tools/probe_rtsp.py) |
+| Gallery / DB inspector | [tracking_engine/tools/inspect_gallery.py](tracking_engine/tools/inspect_gallery.py) |
+| Camera-only production runbook | [docs/production_camera_only_runbook.md](docs/production_camera_only_runbook.md) |
 
 ---
 
