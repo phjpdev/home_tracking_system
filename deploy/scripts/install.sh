@@ -45,6 +45,16 @@ install -d -m 0750 -o tracking -g tracking /var/log/tracking-engine
 install -d -m 0700 -o tracking -g tracking /var/backups/tracking-engine
 install -d -m 0750 -o root     -g tracking /etc/tracking-engine
 
+# Per-service writable cache outside /home so the systemd hardening
+# (ProtectHome=true) doesn't block Ultralytics / Matplotlib / Torch from
+# writing their config + cache.
+install -d -m 0700 -o tracking -g tracking /var/lib/tracking-engine
+install -d -m 0700 -o tracking -g tracking /var/lib/tracking-engine/.cache
+install -d -m 0700 -o tracking -g tracking /var/lib/tracking-engine/.config
+install -d -m 0700 -o tracking -g tracking /var/lib/tracking-engine/.config/Ultralytics
+install -d -m 0700 -o tracking -g tracking /var/lib/tracking-engine/.cache/matplotlib
+install -d -m 0700 -o tracking -g tracking /var/lib/tracking-engine/.cache/torch
+
 if [ "${SRC_DIR}" != "${APP_DIR}" ]; then
     echo "[install] copying source to ${APP_DIR}"
     rsync -a --delete --exclude='.venv' --exclude='__pycache__' --exclude='.git' \

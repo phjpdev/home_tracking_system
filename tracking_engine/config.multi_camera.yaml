@@ -65,10 +65,15 @@ tracking:
 
 poster:
   # Live Maro tracking service on the LAN. Confirmed reachable from the Pi
-  # (192.168.178.0/24) on 2026-05-22 by the installer; plain HTTP, no auth.
+  # (192.168.178.0/24) on 2026-05-22; plain HTTP, no auth.
   # Set ``dry_run: true`` and rewrite the URL back to 127.0.0.1:8765 for local
   # smoke tests (mock_maro_server.py).
   url: http://192.168.178.25:8420/tracking/positions
+  # ``events_url`` is only used by the thermal pipeline (Phase C, currently
+  # disabled). Maro server returned 404 for /tracking/events on 2026-05-22 —
+  # the route hasn't been implemented yet on the client side. Leave the URL
+  # configured so it just works once they add the route; the camera-only
+  # engine ignores it.
   events_url: http://192.168.178.25:8420/tracking/events
   timeout_sec: 3.0
   dry_run: false

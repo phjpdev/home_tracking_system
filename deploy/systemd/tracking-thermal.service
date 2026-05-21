@@ -9,6 +9,10 @@ User=tracking
 Group=tracking
 WorkingDirectory=/opt/tracking-system
 Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/var/lib/tracking-engine
+Environment=XDG_CACHE_HOME=/var/lib/tracking-engine/.cache
+Environment=XDG_CONFIG_HOME=/var/lib/tracking-engine/.config
+Environment=MPLCONFIGDIR=/var/lib/tracking-engine/.cache/matplotlib
 ExecStart=/opt/tracking-system/.venv/bin/python -m tracking_engine.thermal.run \
     --config /opt/tracking-system/tracking_engine/config.multi_camera.yaml
 Restart=on-failure
@@ -24,7 +28,7 @@ ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-ReadWritePaths=/opt/tracking-system /var/log/tracking-engine
+ReadWritePaths=/opt/tracking-system /var/log/tracking-engine /var/lib/tracking-engine
 
 [Install]
 WantedBy=multi-user.target

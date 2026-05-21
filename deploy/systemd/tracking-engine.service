@@ -9,6 +9,15 @@ User=tracking
 Group=tracking
 WorkingDirectory=/opt/tracking-system
 Environment=PYTHONUNBUFFERED=1
+# ProtectHome=true (below) hides /home/tracking, so Ultralytics, Matplotlib, and
+# Torch must be redirected to a writable cache outside /home. /var/lib/tracking-engine
+# is created by deploy/scripts/install.sh and owned by the tracking user.
+Environment=HOME=/var/lib/tracking-engine
+Environment=XDG_CACHE_HOME=/var/lib/tracking-engine/.cache
+Environment=XDG_CONFIG_HOME=/var/lib/tracking-engine/.config
+Environment=MPLCONFIGDIR=/var/lib/tracking-engine/.cache/matplotlib
+Environment=YOLO_CONFIG_DIR=/var/lib/tracking-engine/.config/Ultralytics
+Environment=TORCH_HOME=/var/lib/tracking-engine/.cache/torch
 ExecStart=/opt/tracking-system/.venv/bin/python -m tracking_engine.multi_camera \
     --config /opt/tracking-system/tracking_engine/config.multi_camera.yaml
 Restart=on-failure
@@ -25,7 +34,7 @@ ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-ReadWritePaths=/opt/tracking-system /var/log/tracking-engine /var/backups/tracking-engine
+ReadWritePaths=/opt/tracking-system /var/log/tracking-engine /var/backups/tracking-engine /var/lib/tracking-engine
 
 [Install]
 WantedBy=multi-user.target

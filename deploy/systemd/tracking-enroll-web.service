@@ -10,6 +10,9 @@ Group=tracking
 WorkingDirectory=/opt/tracking-system
 Environment=PYTHONUNBUFFERED=1
 Environment=TRACKING_CONFIG=/opt/tracking-system/tracking_engine/config.multi_camera.yaml
+Environment=HOME=/var/lib/tracking-engine
+Environment=XDG_CACHE_HOME=/var/lib/tracking-engine/.cache
+Environment=XDG_CONFIG_HOME=/var/lib/tracking-engine/.config
 ExecStart=/opt/tracking-system/.venv/bin/uvicorn tracking_engine.enroll_web.app:app \
     --host 0.0.0.0 --port 8088
 Restart=on-failure
@@ -21,6 +24,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
+ReadWritePaths=/opt/tracking-system /var/lib/tracking-engine
 
 [Install]
 WantedBy=multi-user.target
