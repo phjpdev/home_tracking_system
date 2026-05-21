@@ -30,6 +30,31 @@ import cv2
 import yaml
 
 
+_ALLOWED_ROTATIONS = (0, 90, 180, 270)
+
+
+def _norm_rotate(raw: Any) -> int:
+    if raw is None:
+        return 0
+    try:
+        deg = int(raw) % 360
+    except (TypeError, ValueError):
+        return 0
+    return deg if deg in _ALLOWED_ROTATIONS else 0
+
+
+def _apply_rotate(frame, deg: int):
+    if deg == 0 or frame is None:
+        return frame
+    if deg == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if deg == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if deg == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
+
+
 def _load_streams(cfg_path: Path) -> list[dict[str, Any]]:
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
     mc = cfg.get("multi_camera") or {}
@@ -44,11 +69,24 @@ def _load_streams(cfg_path: Path) -> list[dict[str, Any]]:
         url = str(row.get("rtsp_url", "")).strip()
         if not name or not url:
             continue
-        out.append({"name": name, "url": url})
+        out.append(
+            {
+                "name": name,
+                "url": url,
+                "rotate": _norm_rotate(row.get("rotate")),
+            }
+        )
     return out
 
 
-def _probe_one(name: str, url: str, frames: int, timeout: float, save_dir: Path | None) -> dict[str, Any]:
+def _probe_one(
+    name: str,
+    url: str,
+    frames: int,
+    timeout: float,
+    save_dir: Path | None,
+    rotate_deg: int,
+) -> dict[str, Any]:
     cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
     try:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -85,8 +123,9 @@ def _probe_one(name: str, url: str, frames: int, timeout: float, save_dir: Path 
 
     if save_dir is not None and last_frame is not None:
         save_dir.mkdir(parents=True, exist_ok=True)
+        rotated = _apply_rotate(last_frame, rotate_deg) if rotate_deg else last_frame
         out_path = save_dir / f"{name}.png"
-        cv2.imwrite(str(out_path), last_frame)
+        cv2.imwrite(str(out_path), rotated)
 
     return {
         "name": name,
@@ -97,6 +136,7 @@ def _probe_one(name: str, url: str, frames: int, timeout: float, save_dir: Path 
         "width": fw,
         "height": fh,
         "elapsed_sec": elapsed,
+        "rotate_deg": rotate_deg,
         "saved": str(save_dir / f"{name}.png") if save_dir else None,
     }
 
@@ -117,6 +157,14 @@ def main() -> int:
         default=None,
         help="optional directory to save one still per camera (PNG)",
     )
+    ap.add_argument(
+        "--no-rotate",
+        action="store_true",
+        help=(
+            "ignore the per-camera 'rotate' field and save the raw stream frame; "
+            "use this to verify whether a rotation override is actually needed"
+        ),
+    )
     args = ap.parse_args()
 
     if not args.config.is_file():
@@ -131,13 +179,23 @@ def main() -> int:
     print(f"[probe] checking {len(streams)} enabled stream(s) from {args.config}", file=sys.stderr)
     results: list[dict[str, Any]] = []
     for s in streams:
-        print(f"[probe] -> {s['name']}  {s['url']}", file=sys.stderr)
-        r = _probe_one(s["name"], s["url"], args.frames, args.timeout, args.save_stills)
+        rot = 0 if args.no_rotate else int(s.get("rotate") or 0)
+        rot_note = f"  rotate={rot}deg" if rot else ""
+        print(f"[probe] -> {s['name']}  {s['url']}{rot_note}", file=sys.stderr)
+        r = _probe_one(
+            s["name"],
+            s["url"],
+            args.frames,
+            args.timeout,
+            args.save_stills,
+            rot,
+        )
         results.append(r)
         if r.get("ok"):
             print(
                 f"   OK  frames={r['frames']:>3d}  size={r['width']}x{r['height']}  "
                 f"fps~{r['fps']:.1f}  in {r['elapsed_sec']:.1f}s"
+                + (f"  rotate={r.get('rotate_deg')}deg" if r.get("rotate_deg") else "")
                 + (f"  still={r['saved']}" if r.get("saved") else "")
             )
         else:

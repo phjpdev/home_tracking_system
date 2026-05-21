@@ -69,6 +69,20 @@ def _open_source(
     return open_rtsp(rtsp_url)
 
 
+def _apply_rotate(frame, deg: int):
+    """Compensate for cameras mounted upside-down or rotated. ``deg`` is one of 0/90/180/270."""
+
+    if deg == 0 or frame is None:
+        return frame
+    if deg == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if deg == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if deg == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
+
+
 def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     cfg = _load_yaml(cfg_path)
     cfg_dir = cfg_path.parent
@@ -115,6 +129,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     calibrations = []
     trackers: list[ByteTracker] = []
     sources: list[FrameSource] = []
+    rotations: list[int] = []
 
     use_latest_rtsp = bool(mc.get("use_latest_frame_rtsp", True))
 
@@ -129,6 +144,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                     use_latest_rtsp=use_latest_rtsp,
                 )
             )
+            rotations.append(int(cam.get("rotate", 0) or 0))
     except (KeyError, OSError, FileNotFoundError) as e:
         print(f"[multi] setup failed: {e}", file=sys.stderr)
         for s in sources:
@@ -165,6 +181,13 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
         f"detector={detector.backend()} POST={poster.url} dry_run={poster.dry_run}",
         file=sys.stderr,
     )
+    rotated = [(c["name"], r) for c, r in zip(cameras, rotations) if r]
+    if rotated:
+        print(
+            "[multi] rotation overrides: "
+            + ", ".join(f"{n}={r}deg" for n, r in rotated),
+            file=sys.stderr,
+        )
     if not poster.dry_run:
         print(
             "[multi] ensure sink is running (`python tracking_engine/mock_maro_server.py`) "
@@ -237,6 +260,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
                 t_grab = time.perf_counter()
                 ok, frame = source.read()
+                if ok and frame is not None and rotations[idx]:
+                    frame = _apply_rotate(frame, rotations[idx])
                 sum_grab += (time.perf_counter() - t_grab) * 1000.0
 
                 if not ok or frame is None:

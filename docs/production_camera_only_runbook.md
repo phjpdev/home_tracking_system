@@ -152,6 +152,62 @@ values between the offending `name:` rows. Do **not** rename the
 `name:` keys themselves — those are referenced by
 `camera_calibrations.json` and the placement JSON.
 
+### 2.2 Fix upside-down or sideways cameras (`rotate:` per stream)
+
+Some PoE mounts force the camera body to hang in an unusual orientation
+and the firmware does not auto-rotate. Symptom: the saved still has the
+ceiling at the bottom, or the floor on the side. Fix is one line per
+camera in `config.multi_camera.yaml`:
+
+```yaml
+streams:
+  - name: cam_yoga_ne
+    rtsp_url: "rtsp://192.168.178.71:554/..."
+    enabled: true
+    rotate: 180        # 0 (default) | 90 | 180 | 270  — degrees clockwise
+```
+
+The engine applies the rotation to every grabbed frame **before**
+detection, so detections, ByteTrack, the homography, and Re-ID all see
+the corrected image. `tools/probe_rtsp.py` honours the same field, so
+your saved stills already show what the engine will see — that means
+homography calibration in §3 stays correct.
+
+Confirmed at the 2026-05-21 install:
+
+| Layout name | IP | `rotate:` | Reason |
+|-------------|----|-----------|--------|
+| `cam_yoga_ne`  | .71 | `180` | mount hangs upside-down |
+| `cam_yoga_se`  | .70 | `180` | mount hangs upside-down |
+| `cam_hallway_n`| .74 | `180` | mount hangs upside-down |
+| (others)       |     | `0`   | normal |
+
+Diagnostic workflow when a new camera arrives or someone re-mounts an
+existing one:
+
+```bash
+# 1. Capture the raw stream (ignore any rotate: in the YAML).
+sudo -u tracking ./.venv/bin/python tools/probe_rtsp.py \
+    --no-rotate --frames 30 --timeout 8 --save-stills /tmp/stills_raw
+
+# 2. Eyeball /tmp/stills_raw/*.png. Pick a rotation:
+#    - ceiling at bottom of image  ->  rotate: 180
+#    - room rotated 90deg right    ->  rotate: 270  (i.e. rotate the image 270 cw to undo)
+#    - room rotated 90deg left     ->  rotate: 90
+# 3. Edit config.multi_camera.yaml, set rotate: <N> on that stream,
+#    then re-run probe with rotation applied to confirm:
+sudo -u tracking ./.venv/bin/python tools/probe_rtsp.py \
+    --frames 5 --timeout 8 --save-stills /tmp/stills_fixed
+```
+
+The startup log line `[multi] rotation overrides: cam_yoga_ne=180deg, ...`
+shows which cameras have a rotation applied — useful when triaging from
+`journalctl`.
+
+> Always do §2.2 **before** §3. Calibrating a homography against an
+> upside-down image and then enabling `rotate:` afterwards will silently
+> mirror your floor coordinates.
+
 ## 3. Calibrate homographies (per camera)
 
 The shipped `tracking_engine/calibration/camera_calibrations.json` uses
@@ -361,5 +417,6 @@ under `_ensure_schema`.
 | Two people share one `global_id` | lower `reid.body.threshold_match` by 0.05; tune in `phase_a5_tuning.md` |
 | One person gets two `global_id` | raise `reid.body.threshold_match` by 0.05 |
 | 100% CPU on one core | sub-stream is missing; switch all RTSP URLs to the 640×480/15 fps sub-stream |
+| Image upside-down or sideways in `/tmp/stills` | add `rotate: 180` (or `90`/`270`) to that stream in `config.multi_camera.yaml`; see §2.2 |
 
 For deeper troubleshooting: [`plan/MASTER_PLAN.md`](../plan/MASTER_PLAN.md) §13.3.

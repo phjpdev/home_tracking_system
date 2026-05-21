@@ -38,6 +38,27 @@ def layout_cameras_by_name(layout: Mapping[str, Any]) -> dict[str, LayoutCamera]
     return out
 
 
+_ALLOWED_ROTATIONS = (0, 90, 180, 270)
+
+
+def _normalize_rotate(raw: Any, name: str) -> int:
+    if raw is None:
+        return 0
+    try:
+        deg = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"stream {name!r}: invalid rotate {raw!r}; "
+            "use one of 0, 90, 180, 270 (degrees clockwise)"
+        ) from exc
+    deg %= 360
+    if deg not in _ALLOWED_ROTATIONS:
+        raise ValueError(
+            f"stream {name!r}: rotate must be 0, 90, 180, or 270 (got {deg})"
+        )
+    return deg
+
+
 def resolve_active_streams(
     layout: Mapping[str, Any],
     streams_yaml: list[dict[str, Any]],
@@ -45,10 +66,13 @@ def resolve_active_streams(
 ) -> list[dict[str, Any]]:
     """Merge placement JSON with YAML ``streams`` entries.
 
-    Each YAML row: ``name``, ``enabled`` (default true), ``rtsp_url`` (optional if video override).
+    Each YAML row: ``name``, ``enabled`` (default true), ``rtsp_url`` (optional if
+    video override), ``rotate`` (optional, one of 0/90/180/270, default 0 — applied
+    after frame grab to compensate for an upside-down or sideways physical mount).
 
     Returns ordered list of dicts:
-    ``name, room, zone, rtsp_url, video_path`` (video_path may be None).
+    ``name, room, zone, rtsp_url, video_path, rotate`` (video_path may be None,
+    rotate is an int in {0, 90, 180, 270}).
     """
 
     by_name = layout_cameras_by_name(layout)
@@ -76,6 +100,8 @@ def resolve_active_streams(
                 f"stream {name!r}: set rtsp_url in config or pass --video {name}=path"
             )
 
+        rotate = _normalize_rotate(row.get("rotate"), name)
+
         active.append(
             {
                 "name": lc.name,
@@ -84,6 +110,7 @@ def resolve_active_streams(
                 "zone": lc.room,
                 "rtsp_url": rtsp_url,
                 "video_path": video_path,
+                "rotate": rotate,
             }
         )
 

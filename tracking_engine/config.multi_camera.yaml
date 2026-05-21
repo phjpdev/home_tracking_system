@@ -18,6 +18,13 @@ multi_camera:
   # IP -> layout-name mapping confirmed by the installer (CKiekhoefel) on
   # 2026-05-21 from the as-built positions. Re-run probe_rtsp.py + eyeball stills
   # if any camera is moved.
+  #
+  # Per-stream ``rotate`` (optional, one of 0/90/180/270 degrees clockwise) is
+  # applied to every grabbed frame before detection AND to stills saved by
+  # ``tools/probe_rtsp.py``. Use it when a camera is mounted upside-down or on
+  # its side and the OEM firmware doesn't compensate. Default is 0.
+  # Confirmed flipped on 2026-05-21 from probe stills:
+  #   cam_yoga_ne (.71), cam_yoga_se (.70), cam_hallway_n (.74) -> rotate: 180
   streams:
     - name: cam_kwz_sw
       rtsp_url: "rtsp://192.168.178.75:554/user=admin&password=admin123&channel=1&stream=1.sdp"
@@ -34,12 +41,15 @@ multi_camera:
     - name: cam_yoga_ne
       rtsp_url: "rtsp://192.168.178.71:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
+      rotate: 180   # mounted upside-down; physical re-mount also acceptable
     - name: cam_yoga_se
       rtsp_url: "rtsp://192.168.178.70:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
+      rotate: 180   # mounted upside-down; physical re-mount also acceptable
     - name: cam_hallway_n
       rtsp_url: "rtsp://192.168.178.74:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
+      rotate: 180   # mounted upside-down; physical re-mount also acceptable
 
 calibration_file: calibration/camera_calibrations.json
 
