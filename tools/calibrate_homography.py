@@ -338,7 +338,12 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--camera", required=True, help="layout name (e.g. cam_kwz_sw)")
+    ap.add_argument(
+        "--camera",
+        required=True,
+        type=lambda s: s.strip(),
+        help="layout name (e.g. cam_kwz_sw); whitespace is stripped",
+    )
     ap.add_argument("--rtsp", default=None, help="RTSP URL to grab a still from")
     ap.add_argument("--image", type=Path, default=None, help="path to a saved still image")
     ap.add_argument(
