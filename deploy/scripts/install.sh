@@ -77,8 +77,19 @@ cat > /etc/cron.d/tracking-system <<EOF
 EOF
 chmod 0644 /etc/cron.d/tracking-system
 
-echo "[install] enabling mosquitto"
-bash "${APP_DIR}/deploy/scripts/install_mosquitto.sh"
+# Mosquitto is only needed for Phase B/C (thermal + ESP32 nodes). Camera-only
+# deployments can ignore an mosquitto failure. Set ``SKIP_MQTT=1`` to skip the
+# whole step on a fresh install where you're not ready for thermal yet.
+if [ "${SKIP_MQTT:-0}" = "1" ]; then
+    echo "[install] skipping mosquitto (SKIP_MQTT=1)"
+else
+    echo "[install] enabling mosquitto"
+    if ! bash "${APP_DIR}/deploy/scripts/install_mosquitto.sh"; then
+        echo "[install] WARNING: mosquitto setup failed — camera tracking is unaffected." >&2
+        echo "[install] Re-run with SKIP_MQTT=1, or fix and re-run install_mosquitto.sh later." >&2
+        echo "[install] Diagnostics: systemctl status mosquitto && journalctl -xeu mosquitto.service" >&2
+    fi
+fi
 
 echo
 echo "[install] DONE."

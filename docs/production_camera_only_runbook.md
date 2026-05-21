@@ -56,7 +56,28 @@ Common first-time failure modes:
 | `sudo: ./install.sh: command not found` | The script lost its execute bit during `git clone` (Windows checkout). Use `sudo bash deploy/scripts/install.sh` instead of `./install.sh`. |
 | `sanity check failed: tracking_engine/requirements.txt missing` | You ran the script from the wrong directory and `SRC_DIR` defaulted incorrectly. Either `cd` to the repo root or run with `SRC_DIR=/path/to/repo sudo -E bash deploy/scripts/install.sh`. |
 | `bad interpreter: /usr/bin/env bash^M` | CRLF line endings in the script. Run `sudo apt install -y dos2unix && find deploy/scripts -name '*.sh' -exec dos2unix {} +` and try again. |
+| `Job for mosquitto.service failed because the control process exited with error code` | Mosquitto is only needed for Phase B/C. Re-run with `SKIP_MQTT=1 sudo -E bash deploy/scripts/install.sh` or just continue — camera tracking is unaffected. Fix later with `sudo systemctl status mosquitto` + `sudo journalctl -xeu mosquitto.service` (typical cause: a stale `listener 1883` already bound from a previous install). |
 | `apt-get: command not found` mid-run | You're not on Debian/Raspberry Pi OS. The script is Pi-OS specific. |
+
+### 1.1 Edit-and-redeploy loop with git
+
+The installer **rsyncs** the repo into `/opt/tracking-system`, which is
+where the systemd service runs from. Your git clone at
+`/home/pi/home_tracking_system` is the source of truth; `/opt/tracking-system`
+is the live copy. Two ways to iterate:
+
+```bash
+# Option A — pull a change you committed on your workstation:
+cd ~/home_tracking_system && git pull
+sudo bash deploy/scripts/install.sh    # rsyncs into /opt/tracking-system
+
+# Option B — quick local edit on the Pi for triage (overwritten on next pull/install):
+sudo -u tracking nano /opt/tracking-system/tracking_engine/config.multi_camera.yaml
+sudo systemctl restart tracking-engine
+```
+
+Anything stable you change on the Pi: copy back into `~/home_tracking_system`,
+commit, and push, otherwise the next install run will silently overwrite it.
 
 ## 2. Probe the seven RTSP streams
 
