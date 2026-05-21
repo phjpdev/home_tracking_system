@@ -23,22 +23,40 @@ sensors arrive, switch back to the full guide.
 ## 1. One-shot Pi install
 
 ```bash
-ssh tracking-pi
+ssh maro@maro-head.tail79e96b.ts.net   # use the Linux user the owner created
 sudo apt update && sudo apt full-upgrade -y
 sudo apt install -y python3-venv python3-pip git rsync sqlite3
-git clone <repo-url> /opt/tracking-system          # or rsync from workstation
-cd /opt/tracking-system
-sudo ./deploy/scripts/install.sh
+
+# Clone anywhere — the installer self-locates the repo root and copies into /opt.
+mkdir -p ~/src && cd ~/src
+git clone <repo-url> tracking
+cd tracking
+
+# Always invoke with ``bash`` so the missing execute-bit on git-from-Windows
+# checkouts does not bite. The script is idempotent — safe to re-run.
+sudo bash deploy/scripts/install.sh
 ```
 
 The installer (see [`deploy/scripts/install.sh`](../deploy/scripts/install.sh)):
 
+- self-detects the repo root from its own path,
 - creates the `tracking` system user,
+- rsyncs the repo into `/opt/tracking-system` and restores `+x` on
+  every `deploy/scripts/*.sh` (Windows git checkouts often drop it),
 - installs Mosquitto (you can ignore it for now; thermal will use it later),
 - creates a venv at `/opt/tracking-system/.venv` with all Python deps,
 - drops three systemd units (`tracking-engine`, `tracking-thermal`,
   `tracking-enroll-web`); only the first one needs to be started today,
 - sets up the cron jobs for backup + GDPR retention purge.
+
+Common first-time failure modes:
+
+| Error | Fix |
+|-------|-----|
+| `sudo: ./install.sh: command not found` | The script lost its execute bit during `git clone` (Windows checkout). Use `sudo bash deploy/scripts/install.sh` instead of `./install.sh`. |
+| `sanity check failed: tracking_engine/requirements.txt missing` | You ran the script from the wrong directory and `SRC_DIR` defaulted incorrectly. Either `cd` to the repo root or run with `SRC_DIR=/path/to/repo sudo -E bash deploy/scripts/install.sh`. |
+| `bad interpreter: /usr/bin/env bash^M` | CRLF line endings in the script. Run `sudo apt install -y dos2unix && find deploy/scripts -name '*.sh' -exec dos2unix {} +` and try again. |
+| `apt-get: command not found` mid-run | You're not on Debian/Raspberry Pi OS. The script is Pi-OS specific. |
 
 ## 2. Probe the seven RTSP streams
 
