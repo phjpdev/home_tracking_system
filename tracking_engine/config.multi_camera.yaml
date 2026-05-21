@@ -64,12 +64,14 @@ tracking:
   default_privacy: false
 
 poster:
-  # Point at the live Maro service once it is reachable. Until then keep
-  # ``dry_run: true`` so the engine logs payloads without HTTP failures.
-  url: http://127.0.0.1:8765/tracking/positions
-  events_url: http://127.0.0.1:8765/tracking/events
+  # Live Maro tracking service on the LAN. Confirmed reachable from the Pi
+  # (192.168.178.0/24) on 2026-05-22 by the installer; plain HTTP, no auth.
+  # Set ``dry_run: true`` and rewrite the URL back to 127.0.0.1:8765 for local
+  # smoke tests (mock_maro_server.py).
+  url: http://192.168.178.25:8420/tracking/positions
+  events_url: http://192.168.178.25:8420/tracking/events
   timeout_sec: 3.0
-  dry_run: true
+  dry_run: false
   verify_tls: true
   include_latency_in_post: false
 
