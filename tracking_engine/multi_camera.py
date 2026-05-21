@@ -428,7 +428,21 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
             tick += 1
             if log_every > 0 and tick % log_every == 0:
-                print(f"[multi] tick={tick}  {lat_all.summary_line()}", file=sys.stderr)
+                tick_persons = sum(len(p.get("persons") or []) for p in pending_payloads)
+                tick_active = sum(
+                    1 for p in pending_payloads if p.get("persons")
+                )
+                breakdown = ",".join(
+                    f"{p['cam_id']}={len(p.get('persons') or [])}"
+                    for p in pending_payloads
+                    if p.get("persons")
+                ) or "none"
+                print(
+                    f"[multi] tick={tick} persons={tick_persons} "
+                    f"active_cams={tick_active}/{len(cameras)} ({breakdown})  "
+                    f"{lat_all.summary_line()}",
+                    file=sys.stderr,
+                )
 
             if max_ticks > 0 and tick >= max_ticks:
                 break
