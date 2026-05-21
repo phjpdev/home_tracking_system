@@ -11,30 +11,34 @@ multi_camera:
   cameras_layout_file: ../camera_placement_plan/output/cameras_config.json
   # When true (default), each RTSP uses a background grab thread that keeps only the latest frame.
   use_latest_frame_rtsp: true
-  # Production deploy: replace the rtsp_url placeholders with the LAN IPs of the
-  # 7 PoE cameras and toggle ``enabled`` per stream you want active.
-  # Sub-stream (640x480 @ 15 fps) is recommended for the Pi 5 detector.
+  # Production deploy on the home LAN (192.168.178.0/24): seven OEM PoE cams at
+  # 192.168.178.70-76, RTSP path uses inline credentials in the query string.
+  #   stream=0 -> main (2880x1620, H.265)
+  #   stream=1 -> sub  (640x480,  H.264 — used for tracking on Pi 5 CPU)
+  # The IP -> layout-name mapping below is the working assumption (sorted by IP).
+  # Run ``python tools/probe_rtsp.py --save-stills /tmp/stills`` and eyeball each
+  # PNG to confirm; swap names here if a camera is in a different physical spot.
   streams:
     - name: cam_kwz_sw
-      rtsp_url: rtsp://CAMERA_IP_1:554/live/sub
+      rtsp_url: "rtsp://192.168.178.70:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_kwz_nw
-      rtsp_url: rtsp://CAMERA_IP_2:554/live/sub
+      rtsp_url: "rtsp://192.168.178.71:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_kwz_ne
-      rtsp_url: rtsp://CAMERA_IP_3:554/live/sub
+      rtsp_url: "rtsp://192.168.178.72:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_kwz_se
-      rtsp_url: rtsp://CAMERA_IP_4:554/live/sub
+      rtsp_url: "rtsp://192.168.178.73:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_yoga_ne
-      rtsp_url: rtsp://CAMERA_IP_5:554/live/sub
+      rtsp_url: "rtsp://192.168.178.74:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_yoga_se
-      rtsp_url: rtsp://CAMERA_IP_6:554/live/sub
+      rtsp_url: "rtsp://192.168.178.75:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_hallway_n
-      rtsp_url: rtsp://CAMERA_IP_7:554/live/sub
+      rtsp_url: "rtsp://192.168.178.76:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
 
 calibration_file: calibration/camera_calibrations.json

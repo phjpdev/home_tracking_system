@@ -12,8 +12,10 @@ sensors arrive, switch back to the full guide.
 
 ## 0. Prerequisites
 
-- Raspberry Pi 5 (8 GB) on the LAN, Tailscale-reachable (`ssh tracking-pi`).
-- 7 PoE cameras powered up on the same LAN. Note each one's IP and port.
+- Raspberry Pi 5 (8 GB) on the home LAN `192.168.178.0/24`, reachable
+  via Tailscale (the Pi is `maro-head`, Tailscale IP
+  `100.95.218.102`, shared in by `CKiekhoefel@github`).
+- 7 PoE cameras powered up at `192.168.178.70` … `192.168.178.76`.
 - A workstation with Python and `torch` to export the OSNet model
   (the Pi exports nothing — only consumes ONNX).
 - Repo checked out at `/opt/tracking-system` on the Pi.
@@ -38,47 +40,76 @@ The installer (see [`deploy/scripts/install.sh`](../deploy/scripts/install.sh)):
   `tracking-enroll-web`); only the first one needs to be started today,
 - sets up the cron jobs for backup + GDPR retention purge.
 
-## 2. Discover camera IPs and probe RTSP
+## 2. Probe the seven RTSP streams
 
-From the Pi:
+The home runs on `192.168.178.0/24` (FRITZ!Box subnet). Cameras live at
+`192.168.178.70 … .76`. Each board exposes two RTSP streams using
+inline credentials in the query string:
 
-```bash
-# nmap is a quick way to enumerate webcams; replace the subnet with yours
-sudo apt install -y nmap
-nmap -p 554 --open 192.168.1.0/24
+```text
+rtsp://192.168.178.{70..76}:554/user=admin&password=admin123&channel=1&stream={0|1}.sdp
 ```
 
-Edit `/opt/tracking-system/tracking_engine/config.multi_camera.yaml` and
-replace each `rtsp_url: rtsp://CAMERA_IP_N:554/live/sub` with the real
-URL for that physical position. The seven layout names are fixed:
+| `stream=` | Resolution | Codec | Use |
+|-----------|-----------|-------|-----|
+| `0` | 2880×1620 | H.265 | high-quality archive (we don't run YOLO on this) |
+| `1` | 640×480 | H.264 | tracking — Pi 5 CPU is fine here |
 
-| Name | Room | Mount role |
-|------|------|------------|
-| `cam_kwz_sw` | K/WZ | living-room SW corner, looks NE |
-| `cam_kwz_nw` | K/WZ | living-room NW corner, looks SE |
-| `cam_kwz_ne` | K/WZ | living-room NE corner |
-| `cam_kwz_se` | K/WZ | living-room SE corner |
-| `cam_yoga_ne` | Yoga | yoga-room NE corner |
-| `cam_yoga_se` | Yoga | yoga-room SE corner |
-| `cam_hallway_n` | Hallway | hallway east end |
+`config.multi_camera.yaml` already contains all 7 URLs with `stream=1`.
+Rotate `admin123` to a stronger password as soon as the system is
+stable; cameras are LAN-only but the FRITZ!Box admin account and the
+camera admin account share the password until you change it.
 
-Then verify each stream decodes from the Pi:
+Verify all seven streams decode from the Pi:
 
 ```bash
 cd /opt/tracking-system
-sudo -u tracking ./.venv/bin/python tools/probe_rtsp.py --frames 30 --timeout 8
-```
-
-You should see seven `OK` lines with frame size and FPS. If a camera
-fails: re-check IP, RTSP path (try `/live`, `/stream0`, `/h264Preview_01_sub`),
-PoE port LED, and credentials in the URL (`rtsp://user:pass@ip:554/...`).
-Save one still per camera while you are at it; you will need them for
-calibration:
-
-```bash
-sudo -u tracking ./.venv/bin/python tools/probe_rtsp.py --save-stills /tmp/stills
+sudo -u tracking ./.venv/bin/python tools/probe_rtsp.py --frames 30 --timeout 8 \
+    --save-stills /tmp/stills
 ls /tmp/stills
 ```
+
+Expected output (approximate):
+
+```text
+[probe] -> cam_kwz_sw  rtsp://192.168.178.70:554/...
+   OK  frames= 30  size=640x480  fps~14.6  in 2.1s  still=/tmp/stills/cam_kwz_sw.png
+[probe] -> cam_kwz_nw  rtsp://192.168.178.71:554/...
+   OK  ...
+...
+[probe] summary: 7/7 OK
+```
+
+If a camera fails: check the PoE port LED, ping its IP, confirm the
+URL path (some firmwares use `/cam/realmonitor?channel=1&subtype=1`
+or `/Streaming/Channels/102` instead — try a couple of variants in a
+browser-side `vlc rtsp://...` test).
+
+### 2.1 Confirm the IP → layout-name mapping
+
+The seven layout names in `cameras_config.json` are physical-position
+keyed (e.g. `cam_kwz_sw` is mounted at the south-west corner of the
+living room). The IP order in `config.multi_camera.yaml` is the
+**working assumption** — sorted by IP, room-major:
+
+| IP | Layout name | Room | Mount role |
+|----|-------------|------|------------|
+| 192.168.178.70 | `cam_kwz_sw` | K/WZ | south-west, looks NE |
+| 192.168.178.71 | `cam_kwz_nw` | K/WZ | north-west, looks SE |
+| 192.168.178.72 | `cam_kwz_ne` | K/WZ | north-east on K/WZ-BZ frame |
+| 192.168.178.73 | `cam_kwz_se` | K/WZ | middle-east on K/WZ-BZ frame |
+| 192.168.178.74 | `cam_yoga_ne` | Yoga | north-east, looks SW |
+| 192.168.178.75 | `cam_yoga_se` | Yoga | south-west on SZ-Yoga frame |
+| 192.168.178.76 | `cam_hallway_n` | Hallway | east end, looks W |
+
+Open `/tmp/stills/*.png` and confirm each image actually shows the room
+the layout name claims. If two cameras are swapped (likely on first
+install — there is no rule that says installer A's first plug-in goes
+into layout slot A), simply edit
+`tracking_engine/config.multi_camera.yaml` and swap the two `rtsp_url`
+values between the offending `name:` rows. Do **not** rename the
+`name:` keys themselves — those are referenced by
+`camera_calibrations.json` and the placement JSON.
 
 ## 3. Calibrate homographies (per camera)
 
