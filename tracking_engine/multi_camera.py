@@ -421,10 +421,24 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                         or "Connection refused" in first_post_err
                     ):
                         post_refused_hint_shown = True
-                        print(
-                            "[multi] connection refused: start mock server or poster.dry_run: true",
-                            file=sys.stderr,
+                        is_local = (
+                            "127.0.0.1" in poster.url
+                            or "localhost" in poster.url
                         )
+                        if is_local:
+                            hint = (
+                                "[multi] connection refused on localhost: start "
+                                "mock_maro_server.py or set poster.dry_run: true"
+                            )
+                        else:
+                            hint = (
+                                f"[multi] connection refused at {poster.url}: the "
+                                "configured Maro server is not reachable. Verify it "
+                                "is running and accepting connections; the engine "
+                                "keeps detecting and will deliver POSTs as soon as "
+                                "the server is back."
+                            )
+                        print(hint, file=sys.stderr)
 
             tick += 1
             if log_every > 0 and tick % log_every == 0:
