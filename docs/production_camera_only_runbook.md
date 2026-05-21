@@ -287,8 +287,9 @@ python tools\calibrate_homography.py `
 
 Then in the window that pops up:
 
-1. Look at the still and pick **4–6 floor-plane landmarks** spread
-   across the visible floor (not all in a line). Good landmarks:
+1. Look at the still and pick **at least 6 floor-plane landmarks**
+   (8 is better) spread across the visible floor — not all in a line,
+   not all clustered in one corner. Good landmarks:
    - room corners where two walls meet the floor,
    - door thresholds,
    - the base of fixed installations (kitchen counter, oven plinth) —
@@ -297,9 +298,18 @@ Then in the window that pops up:
 2. Left-click each landmark in the still. After every click, the
    terminal prompts for `x_mm y_mm` — type the global envelope
    coordinate (computed from the anchor table above).
-3. Press **`c`** once you have ≥ 4 points. The tool prints the **mean
+3. Press **`c`** once you have ≥ 6 points. The tool prints the **mean
    reprojection residual in mm**.
-4. Quality bands:
+
+   > **The 4-point trap**: a homography has 8 degrees of freedom and
+   > 4 points give exactly 8 equations, so the fit is *mathematically
+   > exact* — `residual = 0.0 mm` is guaranteed regardless of how
+   > wrong the world coords are. With 4 points the residual is
+   > **meaningless as a quality check**. Always pick ≥ 6 points so
+   > the system is over-determined and the residual is a real RMS
+   > error you can trust. The tool now prints a warning in this case.
+
+4. Quality bands (only meaningful at n ≥ 5):
 
    | Residual (mm) | Verdict |
    |---------------|---------|

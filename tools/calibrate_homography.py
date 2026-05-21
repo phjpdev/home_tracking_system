@@ -290,11 +290,21 @@ def run(args: argparse.Namespace) -> int:
                 except (ValueError, RuntimeError) as exc:
                     print(f"[calibrate] {exc}", file=sys.stderr)
                 else:
+                    n_pts = len(image_points)
                     print(
                         f"[calibrate] homography computed; mean reprojection residual "
-                        f"= {residual:.1f} mm over {len(image_points)} points"
+                        f"= {residual:.1f} mm over {n_pts} points"
                     )
-                    if residual > 200.0:
+                    if n_pts == 4:
+                        print(
+                            "[calibrate] WARNING: with exactly 4 correspondences the "
+                            "fit is mathematically exact (residual is always ~0 mm) "
+                            "no matter how wrong the world coords are. Press 'r' and "
+                            "re-pick with >= 6 well-spread points before relying on "
+                            "this homography.",
+                            file=sys.stderr,
+                        )
+                    elif residual > 200.0:
                         print(
                             "[calibrate] residual is large; consider re-clicking with "
                             "better-spread points before saving",
