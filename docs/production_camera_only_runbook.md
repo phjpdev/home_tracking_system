@@ -131,15 +131,17 @@ keyed (e.g. `cam_kwz_sw` is mounted at the south-west corner of the
 living room). The IP order in `config.multi_camera.yaml` is the
 **working assumption** — sorted by IP, room-major:
 
+As-built mapping confirmed by the installer (CKiekhoefel) on 2026-05-21:
+
 | IP | Layout name | Room | Mount role |
 |----|-------------|------|------------|
-| 192.168.178.70 | `cam_kwz_sw` | K/WZ | south-west, looks NE |
-| 192.168.178.71 | `cam_kwz_nw` | K/WZ | north-west, looks SE |
+| 192.168.178.75 | `cam_kwz_sw` | K/WZ | south-west, looks NE |
+| 192.168.178.76 | `cam_kwz_nw` | K/WZ | north-west, looks SE |
 | 192.168.178.72 | `cam_kwz_ne` | K/WZ | north-east on K/WZ-BZ frame |
 | 192.168.178.73 | `cam_kwz_se` | K/WZ | middle-east on K/WZ-BZ frame |
-| 192.168.178.74 | `cam_yoga_ne` | Yoga | north-east, looks SW |
-| 192.168.178.75 | `cam_yoga_se` | Yoga | south-west on SZ-Yoga frame |
-| 192.168.178.76 | `cam_hallway_n` | Hallway | east end, looks W |
+| 192.168.178.71 | `cam_yoga_ne` | Yoga | north-east, looks SW |
+| 192.168.178.70 | `cam_yoga_se` | Yoga | south-west on SZ-Yoga frame |
+| 192.168.178.74 | `cam_hallway_n` | Hallway | east end, looks W |
 
 Open `/tmp/stills/*.png` and confirm each image actually shows the room
 the layout name claims. If two cameras are swapped (likely on first

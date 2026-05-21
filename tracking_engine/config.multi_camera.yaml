@@ -14,16 +14,16 @@ multi_camera:
   # Production deploy on the home LAN (192.168.178.0/24): seven OEM PoE cams at
   # 192.168.178.70-76, RTSP path uses inline credentials in the query string.
   #   stream=0 -> main (2880x1620, H.265)
-  #   stream=1 -> sub  (640x480,  H.264 — used for tracking on Pi 5 CPU)
-  # The IP -> layout-name mapping below is the working assumption (sorted by IP).
-  # Run ``python tools/probe_rtsp.py --save-stills /tmp/stills`` and eyeball each
-  # PNG to confirm; swap names here if a camera is in a different physical spot.
+  #   stream=1 -> sub  (704x576 PAL D1, H.264 — used for tracking on Pi 5 CPU)
+  # IP -> layout-name mapping confirmed by the installer (CKiekhoefel) on
+  # 2026-05-21 from the as-built positions. Re-run probe_rtsp.py + eyeball stills
+  # if any camera is moved.
   streams:
     - name: cam_kwz_sw
-      rtsp_url: "rtsp://192.168.178.70:554/user=admin&password=admin123&channel=1&stream=1.sdp"
+      rtsp_url: "rtsp://192.168.178.75:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_kwz_nw
-      rtsp_url: "rtsp://192.168.178.71:554/user=admin&password=admin123&channel=1&stream=1.sdp"
+      rtsp_url: "rtsp://192.168.178.76:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_kwz_ne
       rtsp_url: "rtsp://192.168.178.72:554/user=admin&password=admin123&channel=1&stream=1.sdp"
@@ -32,13 +32,13 @@ multi_camera:
       rtsp_url: "rtsp://192.168.178.73:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_yoga_ne
-      rtsp_url: "rtsp://192.168.178.74:554/user=admin&password=admin123&channel=1&stream=1.sdp"
+      rtsp_url: "rtsp://192.168.178.71:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_yoga_se
-      rtsp_url: "rtsp://192.168.178.75:554/user=admin&password=admin123&channel=1&stream=1.sdp"
+      rtsp_url: "rtsp://192.168.178.70:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
     - name: cam_hallway_n
-      rtsp_url: "rtsp://192.168.178.76:554/user=admin&password=admin123&channel=1&stream=1.sdp"
+      rtsp_url: "rtsp://192.168.178.74:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
 
 calibration_file: calibration/camera_calibrations.json
