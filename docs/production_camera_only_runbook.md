@@ -208,14 +208,51 @@ shows which cameras have a rotation applied — useful when triaging from
 > upside-down image and then enabling `rotate:` afterwards will silently
 > mirror your floor coordinates.
 
-## 3. Calibrate homographies (per camera)
+## 3. Calibrate homographies
 
 The shipped `tracking_engine/calibration/camera_calibrations.json` uses
 `mode: "dummy"` — every position is just a linear interpolation in the
 room polygon. **Real production needs a real homography per camera**, or
 the (x_mm, y_mm) you POST is meaningless.
 
-### 3.0 Where to run the tool
+Two tools write the same JSON schema:
+
+| Tool | When to use | Notes |
+|------|-------------|-------|
+| [`tracking_engine/calibrate_web`](../tracking_engine/calibrate_web/__init__.py) (browser, all cameras at once) | **Default for full-site calibration.** Stand at a position; every camera that sees you is pinned to the same world point by construction. | Runs on the Pi or your laptop. Requires the operator physically on site. Live cross-camera disagreement readout flags miss-clicks. |
+| [`tools/calibrate_homography.py`](../tools/calibrate_homography.py) (OpenCV window, one camera at a time) | Fallback when only one camera moved and you want to fix that camera against saved stills without revisiting the site. | Type world coords in mm by hand from §3.2's anchor table. No cross-camera agreement guarantee. |
+
+### 3.0a Recommended: the browser-based multi-camera tool
+
+> The homeowner-facing one-pager for this workflow lives at
+> [`docs/calibration_day_handover.md`](calibration_day_handover.md).
+> Hand them that document; they can complete the calibration walk
+> themselves without a technician on site. The notes below are the
+> integrator-side detail.
+
+On the Pi (or any laptop on the same LAN), with `fastapi` + `uvicorn`
+installed (already in `tracking_engine/requirements.txt`):
+
+```bash
+uvicorn tracking_engine.calibrate_web.app:app --host 0.0.0.0 --port 8090
+```
+
+Open `http://<host>:8090` on a phone (so you can walk and click) and
+follow the workflow:
+
+1. Tap **Recapture all** — every active stream's latest frame appears as a tile.
+2. Stand in a room where 2+ cameras can see you.
+3. On the floor plan canvas, click *where you are standing*. A new position $P_k$ appears (auto-converted to mm via the envelope from `cameras_config.json`).
+4. On every camera tile that sees you, click your **feet**. Tiles that do not see you get the **not visible** checkbox.
+5. Move to a new spot. Repeat until each camera has ≥ 6 positions, well-spread across its floor view.
+6. Watch the live numbers: per-camera **mean residual** (top of tile) and per-position **cross-camera disagreement** (in the position list). Anything > 250 mm shows in red. Re-click the offending position or tile.
+7. **Save**. The JSON is written atomically; the existing tracking engine picks it up on next restart.
+
+Sessions can be exported (**Download session**) and re-imported (**Load session**) if a calibration run is interrupted.
+
+The cross-camera disagreement metric is what the legacy single-camera tool cannot produce: if `cam_yoga_ne` and `cam_yoga_se` see the same standing position, both projections of that click into world mm *must* agree, by construction. This is the validator that turns hand-off in overlap zones from "hope" into "verified".
+
+### 3.0 Fallback: per-camera OpenCV tool — where to run
 
 Calibration **opens a GUI window**. The Pi is headless and X11
 forwarding over Tailscale is too laggy to click pixels accurately —
@@ -542,7 +579,8 @@ under `_ensure_schema`.
 |------|---------|
 | Tail logs | `journalctl -u tracking-engine -f` |
 | Probe all cameras | `python tools/probe_rtsp.py` |
-| Re-calibrate one camera | `python tools/calibrate_homography.py --camera <name> --rtsp ...` |
+| Re-calibrate all cameras (browser, recommended) | `uvicorn tracking_engine.calibrate_web.app:app --host 0.0.0.0 --port 8090` |
+| Re-calibrate one camera (fallback) | `python tools/calibrate_homography.py --camera <name> --rtsp ...` |
 | Inspect gallery | `python -m tracking_engine.tools.inspect_gallery` |
 | Manual restart | `sudo systemctl restart tracking-engine` |
 | Live metrics | `curl http://<pi>:9100/metrics` |

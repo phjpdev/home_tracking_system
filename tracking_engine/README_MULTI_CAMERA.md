@@ -25,6 +25,22 @@ Use [`config.multi_camera.yaml`](config.multi_camera.yaml):
 2. Under `multi_camera.streams`, set real RTSP URLs and `enabled: true` for each camera you want to run.
 3. Ensure [`calibration/camera_calibrations.json`](calibration/camera_calibrations.json) contains matching keys (`cam_kwz_sw`, … `cam_hallway_n`). Dummy bounds use room polygons from the placement JSON; replace with **`homography`** per camera when calibrated.
 
+### Calibration
+
+Two tools write the same JSON schema — pick whichever fits the situation:
+
+- **Recommended: browser-based multi-camera tool** ([`tracking_engine/calibrate_web`](calibrate_web/__init__.py)). Stand at a position, click it once on the floor plan, then click your feet in every camera tile that sees you. Shared world points pin all cameras into the same coordinate system, so hand-off in overlap zones (4 cams in K/WZ, 2 in Yoga) stops jumping. Live per-position cross-camera disagreement readout flags miss-clicks.
+
+  ```bash
+  uvicorn tracking_engine.calibrate_web.app:app --host 0.0.0.0 --port 8090
+  ```
+
+  Open `http://<pi-or-laptop>:8090` from any device on the LAN. ≥ 6 positions per camera required before save; mean residual > 250 mm is rejected unless you tick **force**. Writes atomically to `tracking_engine/calibration/camera_calibrations.json`.
+
+  Hand the homeowner [`docs/calibration_day_handover.md`](../docs/calibration_day_handover.md) — they can complete the whole walk-through themselves, phone in hand, without a technician on site.
+
+- **Fallback for one camera at a time:** [`tools/calibrate_homography.py`](../tools/calibrate_homography.py). Useful if only a single camera moved and you don't want to re-do a full session — points are typed in mm by hand, so the per-camera fit will not auto-agree with the others in overlap zones.
+
 ## Run
 
 From repository root (`Tracking_System/`):
