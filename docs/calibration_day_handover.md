@@ -5,6 +5,12 @@ phone in hand, telling each camera *"this is where I am right now"* at a
 handful of spots in each room. The system uses those positions to learn
 the floor map. Takes 15–25 minutes total. No tape measure required.
 
+> **See it once before you do it.** A 30-second video clip of the loop
+> (Recapture → tap plan → tap feet → walk) lives next to this guide —
+> ask the installer for the link, or see
+> [`calibration_day_video_script.md`](calibration_day_video_script.md)
+> if they haven't shot it yet.
+
 > Nothing in this process needs an installer or a remote technician —
 > you do it yourself. The whole tool runs on the Raspberry Pi in your
 > house; nothing about the calibration leaves your network.
