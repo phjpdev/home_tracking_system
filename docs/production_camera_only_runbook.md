@@ -208,49 +208,56 @@ shows which cameras have a rotation applied — useful when triaging from
 > upside-down image and then enabling `rotate:` afterwards will silently
 > mirror your floor coordinates.
 
-## 3. Calibrate homographies
+## 3. Calibrate homographies (Maro plan pixels)
 
-The shipped `tracking_engine/calibration/camera_calibrations.json` uses
-`mode: "dummy"` — every position is just a linear interpolation in the
-room polygon. **Real production needs a real homography per camera**, or
-the (x_mm, y_mm) you POST is meaningless.
-
-Two tools write the same JSON schema:
+Production targets **Maro's floor-plan canvas** (`2700×1324` px), not architect mm.
+The shipped `camera_calibrations.json` may still be `dummy` or legacy mm — replace with
+`_coordinate_space: "maro_floorplan_px"` before go-live.
 
 | Tool | When to use | Notes |
 |------|-------------|-------|
-| [`tracking_engine/calibrate_web`](../tracking_engine/calibrate_web/__init__.py) (browser, all cameras at once) | **Default for full-site calibration.** Stand at a position; every camera that sees you is pinned to the same world point by construction. | Runs on the Pi or your laptop. Requires the operator physically on site. Live cross-camera disagreement readout flags miss-clicks. |
-| [`tools/calibrate_homography.py`](../tools/calibrate_homography.py) (OpenCV window, one camera at a time) | Fallback when only one camera moved and you want to fix that camera against saved stills without revisiting the site. | Type world coords in mm by hand from §3.2's anchor table. No cross-camera agreement guarantee. |
+| [`calibrate_web`](../tracking_engine/calibrate_web/__init__.py) | **Default.** All cameras, landmark pairs on Maro plan + camera stills. | Remote OK (`--video` still overrides). Residuals in **px**; save gate 8 px mean. |
+| [`tools/calibrate_homography.py`](../tools/calibrate_homography.py) | Legacy mm on architect plan only. | Does **not** align Maro UI dots. |
 
-### 3.0a Recommended: the browser-based multi-camera tool
+**Full operator + SSH workflow:** [`calibration_maro_plan_px.md`](calibration_maro_plan_px.md).
+Short handover: [`calibration_day_handover.md`](calibration_day_handover.md).
 
-> The homeowner-facing one-pager for this workflow lives at
-> [`docs/calibration_day_handover.md`](calibration_day_handover.md).
-> Hand them that document; they can complete the calibration walk
-> themselves without a technician on site. The notes below are the
-> integrator-side detail.
+### 3.0a Recommended: Maro landmark calibration (browser)
 
-On the Pi (or any laptop on the same LAN), with `fastapi` + `uvicorn`
-installed (already in `tracking_engine/requirements.txt`):
+1. Cache Maro assets once (Pi can reach `:8420`):
 
-```bash
-uvicorn tracking_engine.calibrate_web.app:app --host 0.0.0.0 --port 8090
+   ```bash
+   mkdir -p /opt/tracking-system/tracking_engine/calibration/maro_cache
+   curl -s http://127.0.0.1:8420/api/floorplan -o .../maro_cache/floorplan.json
+   curl -s http://127.0.0.1:8420/api/floorplan/bg -o .../maro_cache/floorplan_bg.png
+   curl -s http://127.0.0.1:8420/api/zones -o .../maro_cache/zones.json
+   curl -s http://127.0.0.1:8420/api/spots -o .../maro_cache/spots.json
+   curl -s http://127.0.0.1:8420/api/strips -o .../maro_cache/strips.json
+   ```
+
+2. Start UI on the Pi:
+
+   ```bash
+   python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090
+   ```
+
+3. From laptop: `ssh -L 8090:127.0.0.1:8090 maro@maro-head...` → open `http://localhost:8090`.
+
+4. For each camera: click **6–8 landmarks** on the Maro plan, then the same features in
+   each camera tile (door corners, lamps, strips). Target mean residual **≤ 5 px** (green ✓).
+
+5. **Download session**, **Save**, `sudo systemctl restart tracking-engine`.
+
+6. **Acceptance:** walk each zone; live Maro dot within **~10 px**. If multiple offset dots,
+   confirm `poster.fused_mode: true` in `config.multi_camera.yaml`.
+
+Off-site with stills:
+
+```powershell
+python -m tracking_engine.calibrate_web `
+  --maro-api http://192.168.178.25:8420 `
+  --video cam_kwz_sw=stills/cam_kwz_sw.png ...
 ```
-
-Open `http://<host>:8090` on a phone (so you can walk and click) and
-follow the workflow:
-
-1. Tap **Recapture all** — every active stream's latest frame appears as a tile.
-2. Stand in a room where 2+ cameras can see you.
-3. On the floor plan canvas, click *where you are standing*. A new position $P_k$ appears (auto-converted to mm via the envelope from `cameras_config.json`).
-4. On every camera tile that sees you, click your **feet**. Tiles that do not see you get the **not visible** checkbox.
-5. Move to a new spot. Repeat until each camera has ≥ 6 positions, well-spread across its floor view.
-6. Watch the live numbers: per-camera **mean residual** (top of tile) and per-position **cross-camera disagreement** (in the position list). Anything > 250 mm shows in red. Re-click the offending position or tile.
-7. **Save**. The JSON is written atomically; the existing tracking engine picks it up on next restart.
-
-Sessions can be exported (**Download session**) and re-imported (**Load session**) if a calibration run is interrupted.
-
-The cross-camera disagreement metric is what the legacy single-camera tool cannot produce: if `cam_yoga_ne` and `cam_yoga_se` see the same standing position, both projections of that click into world mm *must* agree, by construction. This is the validator that turns hand-off in overlap zones from "hope" into "verified".
 
 ### 3.0 Fallback: per-camera OpenCV tool — where to run
 
@@ -579,8 +586,8 @@ under `_ensure_schema`.
 |------|---------|
 | Tail logs | `journalctl -u tracking-engine -f` |
 | Probe all cameras | `python tools/probe_rtsp.py` |
-| Re-calibrate all cameras (browser, recommended) | `uvicorn tracking_engine.calibrate_web.app:app --host 0.0.0.0 --port 8090` |
-| Re-calibrate one camera (fallback) | `python tools/calibrate_homography.py --camera <name> --rtsp ...` |
+| Re-calibrate all cameras (Maro plan px) | `python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090` — see [`calibration_maro_plan_px.md`](calibration_maro_plan_px.md) |
+| Re-calibrate one camera (legacy mm) | `python tools/calibrate_homography.py --camera <name> --rtsp ...` |
 | Inspect gallery | `python -m tracking_engine.tools.inspect_gallery` |
 | Manual restart | `sudo systemctl restart tracking-engine` |
 | Live metrics | `curl http://<pi>:9100/metrics` |
@@ -602,7 +609,8 @@ under `_ensure_schema`.
 | Symptom | First check |
 |---------|-------------|
 | Engine restarts every few seconds | `journalctl -u tracking-engine -n 200` — usually a bad RTSP URL |
-| `(x_mm, y_mm)` is obviously wrong | re-run `tools/calibrate_homography.py` for that camera |
+| Dot wrong on Maro plan | re-run `calibrate_web` (landmarks); old mm calibrations are incompatible |
+| Multiple ghost dots per person | enable `tracking.plan_fusion` + `poster.fused_mode` in config |
 | `[multi] WARNING: re-id is using the grayscale fallback embedder` | OSNet ONNX file missing or wrong path; verify §4 |
 | `POST failed: ... Connection refused` | start mock sink (§5) or set `poster.dry_run: true` |
 | Two people share one `global_id` | lower `reid.body.threshold_match` by 0.05; tune in `phase_a5_tuning.md` |

@@ -1,19 +1,4 @@
-"""Per-camera homography fit on a shared set of world positions.
-
-The frontend collects positions ``P_k`` (in floor-plan millimetres) and,
-for each position, the foot-pixel click in every camera that saw the
-operator. We then fit one ``H_c`` per camera against the subset of
-positions that camera saw — same call as
-:func:`tools.calibrate_homography._compute_homography` so the JSON it
-produces is interchangeable with the legacy single-camera tool.
-
-The novelty (vs. ``tools/calibrate_homography.py``) is that the world
-coordinates are *shared* across cameras: at position ``P_k`` every
-camera that saw the operator is pinned to the same ``(x_mm, y_mm)``.
-This is what gives cross-camera consistency in overlap zones; the
-:func:`fit_all` return also includes a per-position
-``cross_camera_disagreement_mm`` metric that the UI shows live.
-"""
+"""Per-camera homography fit on shared floor-plan pixel landmarks."""
 
 from __future__ import annotations
 
@@ -26,36 +11,51 @@ import numpy as np
 
 @dataclass(frozen=True)
 class Position:
-    """One operator standing position visible from one or more cameras."""
+    """One landmark on the Maro plan visible from one or more cameras."""
 
     id: str
-    world_xy_mm: tuple[float, float]
+    world_xy_plan_px: tuple[float, float]
     clicks: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    @property
+    def world_xy_mm(self) -> tuple[float, float]:
+        """Legacy alias — same tuple, may be plan px not mm."""
+        return self.world_xy_plan_px
 
 
 @dataclass
 class CameraFit:
-    """Result of :func:`cv2.findHomography` for one camera."""
-
     cam_id: str
     num_points: int
     image_points: list[tuple[float, float]]
     world_points: list[tuple[float, float]]
     used_position_ids: list[str]
     H: Optional[np.ndarray] = None
-    residual_mm_mean: float = 0.0
-    residual_mm_max: float = 0.0
+    residual_px_mean: float = 0.0
+    residual_px_max: float = 0.0
+    per_position_residual_px: dict[str, float] = field(default_factory=dict)
+    worst_position_id: Optional[str] = None
     error: Optional[str] = None
+
+    @property
+    def residual_mm_mean(self) -> float:
+        return self.residual_px_mean
+
+    @property
+    def residual_mm_max(self) -> float:
+        return self.residual_px_max
 
 
 @dataclass
 class PositionStat:
-    """Live cross-camera consistency for one shared position."""
-
     position_id: str
     contributing_cams: list[str]
-    disagreement_mm: Optional[float] = None
-    per_cam_projection_mm: dict[str, tuple[float, float]] = field(default_factory=dict)
+    disagreement_px: Optional[float] = None
+    per_cam_projection_px: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    @property
+    def disagreement_mm(self) -> Optional[float]:
+        return self.disagreement_px
 
 
 def _fit_one(cam_id: str, src: np.ndarray, dst: np.ndarray, ids: list[str]) -> CameraFit:
@@ -70,13 +70,13 @@ def _fit_one(cam_id: str, src: np.ndarray, dst: np.ndarray, ids: list[str]) -> C
         used_position_ids=list(ids),
     )
     if n < 4:
-        fit.error = f"need >=4 clicked positions, got {n}"
+        fit.error = f"need >=4 clicked landmarks, got {n}"
         return fit
     H, _inliers = cv2.findHomography(
         src.astype(np.float64),
         dst.astype(np.float64),
         method=cv2.RANSAC,
-        ransacReprojThreshold=8.0,
+        ransacReprojThreshold=3.0,
     )
     if H is None:
         fit.error = "findHomography returned None — points may be colinear"
@@ -88,44 +88,27 @@ def _fit_one(cam_id: str, src: np.ndarray, dst: np.ndarray, ids: list[str]) -> C
     proj_xy = proj[:, :2] / w
     residuals = np.linalg.norm(proj_xy - dst.astype(np.float64), axis=1)
     fit.H = H
-    fit.residual_mm_mean = float(np.mean(residuals)) if n else 0.0
-    fit.residual_mm_max = float(np.max(residuals)) if n else 0.0
+    fit.residual_px_mean = float(np.mean(residuals)) if n else 0.0
+    fit.residual_px_max = float(np.max(residuals)) if n else 0.0
+    for i, pid in enumerate(ids):
+        fit.per_position_residual_px[pid] = float(residuals[i])
+    if ids:
+        worst_i = int(np.argmax(residuals))
+        fit.worst_position_id = ids[worst_i]
     return fit
 
 
 def fit_all(
     positions: Iterable[Position],
 ) -> tuple[dict[str, CameraFit], dict[str, PositionStat]]:
-    """Fit one homography per camera and compute per-position consistency.
-
-    Parameters
-    ----------
-    positions
-        Iterable of :class:`Position`. Order is preserved in the
-        per-camera ``used_position_ids``.
-
-    Returns
-    -------
-    cam_fits
-        ``{cam_id: CameraFit}`` for every camera that has >=1 click. A
-        camera with too few points returns a :class:`CameraFit` whose
-        ``H is None`` and ``error`` is set.
-    position_stats
-        ``{position_id: PositionStat}`` for every position, including
-        positions seen by only one camera (their
-        ``disagreement_mm`` is ``None``).
-    """
-
     positions_list = list(positions)
 
     by_cam: dict[str, dict[str, list]] = {}
     for pos in positions_list:
         for cam_id, uv in pos.clicks.items():
-            d = by_cam.setdefault(
-                cam_id, {"src": [], "dst": [], "ids": []}
-            )
+            d = by_cam.setdefault(cam_id, {"src": [], "dst": [], "ids": []})
             d["src"].append([float(uv[0]), float(uv[1])])
-            d["dst"].append([float(pos.world_xy_mm[0]), float(pos.world_xy_mm[1])])
+            d["dst"].append([float(pos.world_xy_plan_px[0]), float(pos.world_xy_plan_px[1])])
             d["ids"].append(pos.id)
 
     cam_fits: dict[str, CameraFit] = {}
@@ -148,18 +131,16 @@ def fit_all(
             if abs(xyw[2]) < 1e-9:
                 continue
             projections[cam_id] = (float(xyw[0] / xyw[2]), float(xyw[1] / xyw[2]))
-        stat.per_cam_projection_mm = projections
+        stat.per_cam_projection_px = projections
         if len(projections) >= 2:
             pts = list(projections.values())
             max_d = 0.0
             for i in range(len(pts)):
                 for j in range(i + 1, len(pts)):
-                    dx = pts[i][0] - pts[j][0]
-                    dy = pts[i][1] - pts[j][1]
-                    d_mm = float(np.hypot(dx, dy))
-                    if d_mm > max_d:
-                        max_d = d_mm
-            stat.disagreement_mm = max_d
+                    d_px = float(np.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]))
+                    if d_px > max_d:
+                        max_d = d_px
+            stat.disagreement_px = max_d
         position_stats[pos.id] = stat
 
     return cam_fits, position_stats

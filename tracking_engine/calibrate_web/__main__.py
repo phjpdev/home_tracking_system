@@ -67,6 +67,11 @@ def main() -> int:
         metavar="NAME=PATH",
         help="replace RTSP for camera NAME with an image or video file (repeatable)",
     )
+    ap.add_argument(
+        "--maro-api",
+        default=None,
+        help="Maro API base URL (default from config or http://192.168.178.25:8420)",
+    )
     ap.add_argument("--host", default="0.0.0.0", help="bind host (default 0.0.0.0)")
     ap.add_argument("--port", type=int, default=8090, help="bind port (default 8090)")
     ap.add_argument(
@@ -95,6 +100,8 @@ def main() -> int:
             return 2
 
     os.environ["TRACKING_CONFIG"] = str(args.config.resolve())
+    if args.maro_api:
+        os.environ["MARO_API_BASE"] = str(args.maro_api).strip()
     if overrides:
         os.environ["CALIBRATE_WEB_VIDEO_OVERRIDES"] = json.dumps(overrides)
         print(

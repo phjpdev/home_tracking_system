@@ -1,6 +1,6 @@
 # Multi-camera tracking engine
 
-Run several placements-defined streams through **one shared person detector**, **one ByteTrack instance per camera**, floor-plane projection via [`calibration/camera_calibrations.json`](calibration/camera_calibrations.json), then **one HTTP POST per camera per tick** (same JSON schema as single-camera mode).
+Run several placements-defined streams through **one shared person detector**, **one ByteTrack instance per camera**, floor-plane projection via [`calibration/camera_calibrations.json`](calibration/camera_calibrations.json), then POST positions to Maro. With **`poster.fused_mode: true`** (default when using Maro plan pixels), the engine emits **one fused POST per tick** instead of seven duplicate dots.
 
 Authoritative camera names and room assignments come from the exported placement file [`camera_placement_plan/output/cameras_config.json`](../camera_placement_plan/output/cameras_config.json).
 
@@ -13,7 +13,8 @@ Authoritative camera names and room assignments come from the exported placement
 | Calibration keys | Each enabled stream name must exist as a key in `camera_calibrations.json`. |
 | Zones | Each POST payload uses `zone = layout room` string (`resolve_active_streams` sets this from JSON `room`). |
 | Tracker IDs | `persons[].id` values (`t<number>`) are **local to that camera’s ByteTrack** — `t3` on camera A is unrelated to `t3` on camera B. |
-| Cross-camera identity | Not fused yet; downstream systems should merge world coordinates if global IDs are required. |
+| Cross-camera identity | Optional Re-ID (`reid.enabled`). **Plan fusion** (`tracking.plan_fusion`) median-fuses per-camera plan positions into one dot; zone polygons clip off-plan. |
+| Coordinate space | Prefer **`maro_floorplan_px`** — camera feet → Maro plan pixels (2700×1324). Legacy mm on architect plan still loads with a warning. |
 | RTSP latency | With `use_latest_frame_rtsp: true`, each RTSP feed runs a background grab thread that keeps only the **latest** decoded frame so one slow inference loop does not backlog stale frames. |
 | Optional POST latency | With `poster.include_latency_in_post: true`, each POST includes `latency_ms` for **grab/detect/track/geom sums across cameras in that tick** (HTTP time is excluded so values stay identical on every POST from the same tick). |
 
@@ -27,19 +28,15 @@ Use [`config.multi_camera.yaml`](config.multi_camera.yaml):
 
 ### Calibration
 
-Two tools write the same JSON schema — pick whichever fits the situation:
-
-- **Recommended: browser-based multi-camera tool** ([`tracking_engine/calibrate_web`](calibrate_web/__init__.py)). Stand at a position, click it once on the floor plan, then click your feet in every camera tile that sees you. Shared world points pin all cameras into the same coordinate system, so hand-off in overlap zones (4 cams in K/WZ, 2 in Yoga) stops jumping. Live per-position cross-camera disagreement readout flags miss-clicks.
+- **Recommended: Maro plan-pixel UI** ([`calibrate_web`](calibrate_web/__init__.py)). Click shared **landmarks** on the Maro floor plan and in each camera still (door corners, lamps). Homography maps camera pixels → plan pixels Maro draws directly. Residuals in **px** (target ≤ 5 px mean; save gate 8 px). Works off-site with `--video cam_*=stills/...` and `--maro-api http://192.168.178.25:8420`.
 
   ```bash
-  uvicorn tracking_engine.calibrate_web.app:app --host 0.0.0.0 --port 8090
+  python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090
   ```
 
-  Open `http://<pi-or-laptop>:8090` from any device on the LAN. ≥ 6 positions per camera required before save; mean residual > 250 mm is rejected unless you tick **force**. Writes atomically to `tracking_engine/calibration/camera_calibrations.json`.
+  Operator guide: [`docs/calibration_maro_plan_px.md`](../docs/calibration_maro_plan_px.md). Short handover: [`docs/calibration_day_handover.md`](../docs/calibration_day_handover.md).
 
-  Hand the homeowner [`docs/calibration_day_handover.md`](../docs/calibration_day_handover.md) — they can complete the whole walk-through themselves, phone in hand, without a technician on site.
-
-- **Fallback for one camera at a time:** [`tools/calibrate_homography.py`](../tools/calibrate_homography.py). Useful if only a single camera moved and you don't want to re-do a full session — points are typed in mm by hand, so the per-camera fit will not auto-agree with the others in overlap zones.
+- **Legacy:** [`tools/calibrate_homography.py`](../tools/calibrate_homography.py) — single-camera, architect **mm** envelope. Does not match Maro canvas; use only for old deployments.
 
 ## Run
 

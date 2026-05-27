@@ -53,6 +53,16 @@ multi_camera:
 
 calibration_file: calibration/camera_calibrations.json
 
+# Maro floor-plan (plan-pixel calibration + zone boundaries for fusion).
+maro:
+  api_base: http://192.168.178.25:8420
+  assets_cache_dir: calibration/maro_cache
+
+calibration:
+  coordinate_space: maro_floorplan_px
+  require_min_points: 6
+  save_residual_px_max: 8.0
+
 detector:
   backend: auto
   yolo_weights: yolov8n.pt
@@ -62,6 +72,12 @@ detector:
 tracking:
   zone: unknown
   default_privacy: false
+  plan_fusion:
+    enabled: true
+    cluster_distance_px: 80.0
+    ema_alpha: 0.35
+    ema_reset_gap_sec: 2.0
+    drop_outside_zones: true
 
 poster:
   # Live Maro tracking service on the LAN. Confirmed reachable from the Pi
@@ -79,6 +95,8 @@ poster:
   dry_run: false
   verify_tls: true
   include_latency_in_post: false
+  # When true, one POST per tick with cam_id "fused" (median across cameras + EMA).
+  fused_mode: true
 
 # Phase C — thermal pipeline. ``python -m tracking_engine.thermal.run`` reads
 # this same YAML and the ``multi_camera.cameras_layout_file`` for geometry.

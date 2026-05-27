@@ -271,3 +271,17 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .toast.bad { border-color: var(--bad); }
 .toast.warn { border-color: var(--warn); }
 .toast.good { border-color: var(--good); }
+
+.loupe {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  background: #000;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+.loupe canvas {
+  display: block;
+  image-rendering: pixelated;
+}

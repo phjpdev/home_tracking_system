@@ -15,7 +15,13 @@ import yaml
 from .observability import configure_logging, metrics, start_metrics_server
 from .pipeline.cameras_layout import load_cameras_layout, resolve_active_streams
 from .pipeline.detector import create_detector
-from .pipeline.homography import foot_point_to_mm, load_calibration
+from .pipeline.homography import (
+    COORD_MARO_PLAN_PX,
+    foot_point_to_mm,
+    foot_point_to_plan_px,
+    load_calibration,
+)
+from .pipeline.plan_fusion import PlanFusionConfig, PlanFusionCoordinator, zones_from_overlay
 from .pipeline.ingest import FrameSource, open_rtsp, open_rtsp_latest, open_video
 from .pipeline.latency import LatencyMonitor
 from .pipeline.poster import PositionPoster
@@ -165,9 +171,40 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     )
     include_lat = bool(pcfg.get("include_latency_in_post", False))
 
-    track_defaults = cfg.get("tracking", {})
+    track_defaults = cfg.get("tracking", {}) or {}
     default_privacy = bool(track_defaults.get("default_privacy", False))
     zone_fallback = str(track_defaults.get("zone", "unknown"))
+    use_plan_px = False
+    if calibrations:
+        use_plan_px = calibrations[0].coordinate_space == COORD_MARO_PLAN_PX
+
+    fusion_cfg_raw = track_defaults.get("plan_fusion") or {}
+    fusion_enabled = bool(fusion_cfg_raw.get("enabled", use_plan_px))
+    plan_fusion: Optional[PlanFusionCoordinator] = None
+    if fusion_enabled:
+        zones: list = []
+        maro_cfg = cfg.get("maro") or {}
+        cache_rel = str(maro_cfg.get("assets_cache_dir") or "calibration/maro_cache")
+        cache_dir = _resolve_path(cfg_dir, cache_rel)
+        try:
+            from .pipeline.maro_floorplan import load_maro_floorplan
+
+            api_base = str(maro_cfg.get("api_base") or "http://192.168.178.25:8420")
+            assets = load_maro_floorplan(api_base, cache_dir)
+            zones = zones_from_overlay(assets.overlay_for_ui())
+        except Exception as exc:
+            print(f"[multi] plan_fusion: could not load Maro zones ({exc})", file=sys.stderr)
+        plan_fusion = PlanFusionCoordinator(
+            PlanFusionConfig(
+                enabled=True,
+                cluster_distance_px=float(fusion_cfg_raw.get("cluster_distance_px", 80.0)),
+                ema_alpha=float(fusion_cfg_raw.get("ema_alpha", 0.35)),
+                ema_reset_gap_sec=float(fusion_cfg_raw.get("ema_reset_gap_sec", 2.0)),
+                drop_outside_zones=bool(fusion_cfg_raw.get("drop_outside_zones", True)),
+            ),
+            zones,
+        )
+    fused_post = bool((cfg.get("poster") or {}).get("fused_mode", fusion_enabled))
 
     rcfg = cfg.get("runtime", {})
     show_preview = bool(rcfg.get("show_preview", False))
@@ -176,8 +213,11 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     log_every = int(rcfg.get("latency_log_every_n_frames", 30))
     max_ticks = int(rcfg.get("max_ticks", rcfg.get("max_frames", 0)))
 
+    coord_note = "maro_plan_px" if use_plan_px else "legacy_mm"
+    fusion_note = " fused_post" if fused_post else ""
     print(
         f"[multi] cameras={len(cameras)} layout={layout_path.name} "
+        f"coords={coord_note}{fusion_note} "
         f"detector={detector.backend()} POST={poster.url} dry_run={poster.dry_run}",
         file=sys.stderr,
     )
@@ -248,6 +288,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             had_any_frame = False
             first_post_err: str | None = None
             pending_payloads: list[dict[str, Any]] = []
+            fusion_rows: list[dict[str, Any]] = []
             video_eof_stop = False
 
             for idx, cam in enumerate(cameras):
@@ -297,11 +338,18 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                         x1, y1, x2, y2 = [float(v) for v in xyxy]
                         foot_u = (x1 + x2) / 2.0
                         foot_v = y2
-                        x_mm, y_mm = foot_point_to_mm(calibration, foot_u, foot_v, fw, fh)
+                        if calibration.coordinate_space == COORD_MARO_PLAN_PX:
+                            px_x, px_y = foot_point_to_plan_px(
+                                calibration, foot_u, foot_v, fw, fh
+                            )
+                        else:
+                            px_x, px_y = foot_point_to_mm(
+                                calibration, foot_u, foot_v, fw, fh
+                            )
                         person_row: dict[str, Any] = {
                             "id": f"t{int(tid)}",
-                            "x": int(round(x_mm)),
-                            "y": int(round(y_mm)),
+                            "x": int(round(px_x)),
+                            "y": int(round(px_y)),
                             "zone": zone,
                             "privacy": default_privacy,
                         }
@@ -316,15 +364,27 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                             extra_by_tid[int(tid)] = rex
                             person_row.update(rex)
                         persons.append(person_row)
+                        if fused_post and plan_fusion is not None:
+                            fusion_rows.append(
+                                {
+                                    "cam_id": cam_id,
+                                    "id": person_row["id"],
+                                    "x": person_row["x"],
+                                    "y": person_row["y"],
+                                    "privacy": person_row["privacy"],
+                                    "global_id": person_row.get("global_id"),
+                                }
+                            )
                     sum_geom += (time.perf_counter() - t_geom0) * 1000.0
 
-                pending_payloads.append(
-                    {
-                        "cam_id": cam_id,
-                        "ts": round(ts, 3),
-                        "persons": persons,
-                    }
-                )
+                if not fused_post:
+                    pending_payloads.append(
+                        {
+                            "cam_id": cam_id,
+                            "ts": round(ts, 3),
+                            "persons": persons,
+                        }
+                    )
 
                 if show_preview and idx == preview_idx and persons:
                     vis = frame.copy()
@@ -368,6 +428,24 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
             if video_eof_stop:
                 break
+
+            if fused_post and plan_fusion is not None:
+                fused_persons = plan_fusion.fuse_tick(fusion_rows, ts)
+                pending_payloads = [
+                    {
+                        "cam_id": "fused",
+                        "ts": round(ts, 3),
+                        "persons": fused_persons,
+                    }
+                ]
+            elif fused_post and fusion_rows:
+                pending_payloads = [
+                    {
+                        "cam_id": cameras[0]["name"] if cameras else "fused",
+                        "ts": round(ts, 3),
+                        "persons": fusion_rows,
+                    }
+                ]
 
             lat_all.record("grab", sum_grab)
             lat_all.record("detect", sum_detect)

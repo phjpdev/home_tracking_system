@@ -25,8 +25,9 @@ except ImportError as exc:  # pragma: no cover
 import yaml
 
 from ..pipeline.cameras_layout import load_cameras_layout, resolve_active_streams
-from .calibration_io import atomic_merge_calibrations, read_calibrations
+from .calibration_io import atomic_merge_calibrations, build_camera_entry, read_calibrations
 from .homography_fit import Position, fit_all
+from ..pipeline.maro_floorplan import COORDINATE_SPACE, load_maro_floorplan
 from .snapshot import CameraSnapshotPool
 
 logger = logging.getLogger(__name__)
@@ -85,11 +86,16 @@ def _load_runtime_config() -> dict[str, Any]:
         cfg_dir, str(cfg.get("calibration_file", "calibration/camera_calibrations.json"))
     )
 
-    coord = layout.get("coordinate_system") or {}
-    envelope = coord.get("envelope_mm") or [19800, 10200]
-    floor_plan_path = (
-        layout_path.parent.parent / "floor_plan.png"
-    ).resolve()
+    maro_cfg = cfg.get("maro") or {}
+    api_base = str(
+        os.environ.get("MARO_API_BASE")
+        or maro_cfg.get("api_base")
+        or "http://192.168.178.25:8420"
+    ).strip()
+    cache_rel = str(maro_cfg.get("assets_cache_dir") or "calibration/maro_cache")
+    cache_dir = _resolve(cfg_dir, cache_rel)
+    save_residual_px_max = float((cfg.get("calibration") or {}).get("save_residual_px_max", 8.0))
+    require_min_points = int((cfg.get("calibration") or {}).get("require_min_points", 6))
 
     return {
         "cfg": cfg,
@@ -98,8 +104,10 @@ def _load_runtime_config() -> dict[str, Any]:
         "layout": layout,
         "cameras": cameras,
         "calib_path": calib_path,
-        "envelope_mm": [float(envelope[0]), float(envelope[1])],
-        "floor_plan_path": floor_plan_path,
+        "maro_api_base": api_base,
+        "maro_cache_dir": cache_dir,
+        "save_residual_px_max": save_residual_px_max,
+        "require_min_points": require_min_points,
     }
 
 
@@ -107,19 +115,32 @@ app = FastAPI(title="Tracking System — Multi-Camera Calibration")
 
 _context: dict[str, Any] = {}
 _pool: Optional[CameraSnapshotPool] = None
+_maro_assets: Any = None
 
 
 @app.on_event("startup")
 def _startup() -> None:
-    global _pool
+    global _pool, _maro_assets
     ctx = _load_runtime_config()
     _context.update(ctx)
     _pool = CameraSnapshotPool(ctx["cameras"])
+    try:
+        _maro_assets = load_maro_floorplan(
+            ctx["maro_api_base"],
+            Path(ctx["maro_cache_dir"]),
+        )
+        _context["maro_assets"] = _maro_assets
+    except Exception as exc:
+        logger.error("calibrate_web: failed to load Maro floor plan: %s", exc)
+        raise
     logger.info(
-        "calibrate_web up: cameras=%d layout=%s calib=%s",
+        "calibrate_web up: cameras=%d layout=%s calib=%s maro=%s (%dx%d)",
         len(ctx["cameras"]),
         ctx["layout_path"].name,
         ctx["calib_path"],
+        ctx["maro_api_base"],
+        _maro_assets.plan_width,
+        _maro_assets.plan_height,
     )
 
 
@@ -167,34 +188,42 @@ def api_cameras() -> JSONResponse:
     return JSONResponse({"cameras": rows})
 
 
+@app.get("/api/maro/floorplan/meta")
+def api_maro_floorplan_meta() -> JSONResponse:
+    assets = _context.get("maro_assets")
+    if assets is None:
+        raise HTTPException(status_code=503, detail="Maro floor plan not loaded")
+    return JSONResponse(assets.meta_dict())
+
+
+@app.get("/api/maro/floorplan/bg")
+def api_maro_floorplan_bg() -> Response:
+    assets = _context.get("maro_assets")
+    if assets is None:
+        raise HTTPException(status_code=503, detail="Maro floor plan not loaded")
+    return Response(
+        content=assets.bg_png,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/maro/floorplan/overlay.json")
+def api_maro_floorplan_overlay() -> JSONResponse:
+    assets = _context.get("maro_assets")
+    if assets is None:
+        raise HTTPException(status_code=503, detail="Maro floor plan not loaded")
+    return JSONResponse(assets.overlay_for_ui())
+
+
 @app.get("/api/floor_plan.png")
-def api_floor_plan() -> FileResponse:
-    fp: Path = _context["floor_plan_path"]
-    if not fp.is_file():
-        raise HTTPException(status_code=404, detail=f"floor_plan.png not found at {fp}")
-    return FileResponse(str(fp), media_type="image/png")
+def api_floor_plan_legacy() -> Response:
+    return api_maro_floorplan_bg()
 
 
 @app.get("/api/floor_plan_meta")
-def api_floor_plan_meta() -> JSONResponse:
-    fp: Path = _context["floor_plan_path"]
-    image_w = image_h = None
-    if fp.is_file():
-        try:
-            import cv2
-
-            img = cv2.imread(str(fp))
-            if img is not None:
-                image_h, image_w = int(img.shape[0]), int(img.shape[1])
-        except Exception:  # pragma: no cover - defensive
-            pass
-    return JSONResponse(
-        {
-            "envelope_mm": _context["envelope_mm"],
-            "image_w": image_w,
-            "image_h": image_h,
-        }
-    )
+def api_floor_plan_meta_legacy() -> JSONResponse:
+    return api_maro_floorplan_meta()
 
 
 @app.post("/api/snapshot_all")
@@ -236,19 +265,19 @@ def _parse_positions(payload: dict[str, Any]) -> list[Position]:
     for i, row in enumerate(raw):
         if not isinstance(row, dict):
             raise HTTPException(status_code=400, detail=f"position[{i}] must be an object")
-        pid = str(row.get("id") or f"P{i + 1}")
-        xy = row.get("world_xy_mm") or row.get("world_mm")
+        pid = str(row.get("id") or f"L{i + 1}")
+        xy = row.get("world_xy_plan_px") or row.get("world_xy_mm") or row.get("world_mm")
         if not isinstance(xy, (list, tuple)) or len(xy) != 2:
             raise HTTPException(
                 status_code=400,
-                detail=f"position[{i}].world_xy_mm must be [x_mm, y_mm]",
+                detail=f"position[{i}].world_xy_plan_px must be [x_px, y_px]",
             )
         try:
             world = (float(xy[0]), float(xy[1]))
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"position[{i}].world_xy_mm not numeric: {xy!r}",
+                detail=f"position[{i}].world_xy_plan_px not numeric: {xy!r}",
             ) from exc
         clicks_raw = row.get("clicks") or {}
         if not isinstance(clicks_raw, dict):
@@ -277,40 +306,19 @@ def _parse_positions(payload: dict[str, Any]) -> list[Position]:
                     status_code=400,
                     detail=f"position[{i}].clicks[{cam_name}] not numeric: {uv!r}",
                 ) from exc
-        out.append(Position(id=pid, world_xy_mm=world, clicks=clicks))
+        out.append(Position(id=pid, world_xy_plan_px=world, clicks=clicks))
     return out
 
 
-def _floor_bounds_from_layout() -> dict[str, float]:
-    env = _context.get("envelope_mm") or [19800.0, 10200.0]
+def _plan_bounds_px() -> dict[str, float]:
+    assets = _context.get("maro_assets")
+    if assets is None:
+        return {"x_min": 0.0, "y_min": 0.0, "x_max": 2700.0, "y_max": 1324.0}
     return {
         "x_min": 0.0,
-        "x_max": float(env[0]),
         "y_min": 0.0,
-        "y_max": float(env[1]),
-    }
-
-
-def _floor_bounds_for_camera(cam_name: str) -> dict[str, float]:
-    layout = _context["layout"]
-    cams = layout.get("cameras") or []
-    row = next((c for c in cams if c.get("name") == cam_name), None)
-    fallback = _floor_bounds_from_layout()
-    if row is None:
-        return fallback
-    room = str(row.get("room") or "").strip()
-    rooms = layout.get("rooms") or {}
-    rdata = rooms.get(room) or {}
-    poly = rdata.get("trackable_polygon_mm")
-    if not poly:
-        return fallback
-    xs = [float(p[0]) for p in poly]
-    ys = [float(p[1]) for p in poly]
-    return {
-        "x_min": min(xs),
-        "x_max": max(xs),
-        "y_min": min(ys),
-        "y_max": max(ys),
+        "x_max": float(assets.plan_width),
+        "y_max": float(assets.plan_height),
     }
 
 
@@ -327,10 +335,9 @@ def _camera_image_size(cam_name: str) -> tuple[int, int]:
     return (704, 576)
 
 
-def _build_response(
-    positions: list[Position],
-    require_min: int = 6,
-) -> dict[str, Any]:
+def _build_response(positions: list[Position]) -> dict[str, Any]:
+    require_min = int(_context.get("require_min_points", 6))
+    px_max = float(_context.get("save_residual_px_max", 8.0))
     cam_fits, position_stats = fit_all(positions)
 
     cams_out: dict[str, Any] = {}
@@ -348,22 +355,28 @@ def _build_response(
             continue
         if fit.num_points < require_min:
             warnings.append(
-                f"{name}: only {fit.num_points} clicked positions (need >= {require_min})"
+                f"{name}: only {fit.num_points} landmarks (need >= {require_min})"
             )
         if fit.num_points == 4:
             warnings.append(
-                f"{name}: exactly 4 correspondences — fit is mathematically exact (residual ~0); "
-                "re-pick with >= 6 well-spread positions"
+                f"{name}: exactly 4 correspondences — residual is not a reliable quality check; "
+                f"use >= {require_min}"
             )
-        if fit.residual_mm_mean > 250.0:
+        if fit.residual_px_mean > px_max:
             errors.append(
-                f"{name}: mean residual {fit.residual_mm_mean:.0f} mm exceeds 250 mm threshold"
+                f"{name}: mean residual {fit.residual_px_mean:.1f} px exceeds {px_max:.0f} px"
             )
+        green = fit.num_points >= require_min and fit.residual_px_mean <= 5.0
         cams_out[name] = {
             "ok": True,
+            "green": green,
             "num_points": fit.num_points,
-            "residual_mm_mean": round(fit.residual_mm_mean, 1),
-            "residual_mm_max": round(fit.residual_mm_max, 1),
+            "residual_px_mean": round(fit.residual_px_mean, 2),
+            "residual_px_max": round(fit.residual_px_max, 2),
+            "worst_position_id": fit.worst_position_id,
+            "per_position_residual_px": {
+                k: round(v, 2) for k, v in fit.per_position_residual_px.items()
+            },
             "used_positions": list(fit.used_position_ids),
             "H": fit.H.tolist(),
         }
@@ -374,17 +387,18 @@ def _build_response(
         positions_out.append(
             {
                 "id": pos.id,
-                "world_xy_mm": [pos.world_xy_mm[0], pos.world_xy_mm[1]],
+                "world_xy_plan_px": [pos.world_xy_plan_px[0], pos.world_xy_plan_px[1]],
                 "contributing_cams": list(stat.contributing_cams) if stat else [],
-                "cross_camera_disagreement_mm": (
-                    round(stat.disagreement_mm, 1)
-                    if stat and stat.disagreement_mm is not None
+                "cross_camera_disagreement_px": (
+                    round(stat.disagreement_px, 1)
+                    if stat and stat.disagreement_px is not None
                     else None
                 ),
             }
         )
 
     return {
+        "coordinate_space": COORDINATE_SPACE,
         "cameras": cams_out,
         "positions": positions_out,
         "warnings": warnings,
@@ -417,30 +431,22 @@ def api_save(payload: dict[str, Any]) -> JSONResponse:
 
     new_entries: dict[str, dict[str, Any]] = {}
     cam_fits, _ = fit_all(positions)
+    assets = _context.get("maro_assets")
+    plan_bounds = _plan_bounds_px()
+    calibrated_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     for cam in _context["cameras"]:
         name = cam["name"]
         fit = cam_fits.get(name)
         if fit is None or fit.H is None:
             continue
         img_w, img_h = _camera_image_size(name)
-        image_points = [list(uv) for uv in fit.image_points]
-        world_points = [list(xy) for xy in fit.world_points]
-        new_entries[name] = {
-            "mode": "homography",
-            "floor_bounds_mm": _floor_bounds_for_camera(name),
-            "H": [[float(v) for v in row] for row in fit.H.tolist()],
-            "calib_image_width": int(img_w),
-            "calib_image_height": int(img_h),
-            "calibrated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "image_points": [[int(round(u)), int(round(v))] for u, v in image_points],
-            "world_points_mm": [[float(x), float(y)] for x, y in world_points],
-            "_comment": (
-                "Generated by tracking_engine.calibrate_web (multi-camera shared-world "
-                "calibration). Per-camera residual mean="
-                f"{fit.residual_mm_mean:.1f}mm max={fit.residual_mm_max:.1f}mm "
-                f"over {fit.num_points} shared positions."
-            ),
-        }
+        new_entries[name] = build_camera_entry(
+            fit=fit,
+            img_w=img_w,
+            img_h=img_h,
+            plan_bounds_px=plan_bounds,
+            calibrated_at=calibrated_at,
+        )
 
     if not new_entries:
         raise HTTPException(
@@ -448,7 +454,17 @@ def api_save(payload: dict[str, Any]) -> JSONResponse:
             detail="no camera produced a valid fit; nothing written",
         )
 
-    atomic_merge_calibrations(_context["calib_path"], new_entries)
+    doc_meta = {
+        "_coordinate_space": COORDINATE_SPACE,
+        "_plan_size_px": [
+            int(assets.plan_width) if assets else 2700,
+            int(assets.plan_height) if assets else 1324,
+        ],
+        "_maro_api_base": str(_context.get("maro_api_base", "")),
+    }
+    atomic_merge_calibrations(
+        _context["calib_path"], new_entries, document_meta=doc_meta
+    )
     body["status"] = "ok"
     body["written"] = sorted(new_entries.keys())
     body["calib_path"] = str(_context["calib_path"])
@@ -460,10 +476,13 @@ def api_session_sample() -> JSONResponse:
     """Empty session template the frontend can use as a starting point."""
 
     cams = [c["name"] for c in _context["cameras"]]
+    assets = _context.get("maro_assets")
+    meta = assets.meta_dict() if assets else {}
     return JSONResponse(
         {
-            "version": 1,
-            "envelope_mm": _context["envelope_mm"],
+            "version": 2,
+            "coordinate_space": COORDINATE_SPACE,
+            "plan_meta": meta,
             "cameras": cams,
             "positions": [],
         }
