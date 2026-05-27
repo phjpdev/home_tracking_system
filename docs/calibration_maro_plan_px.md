@@ -23,25 +23,51 @@ Maro must draw dots at these coordinates on `floorplan_bg.png` without extra con
 
 ## 1. Cache Maro assets (once per machine)
 
-From the Pi (or any host that can reach Maro):
+On the Pi, use the **installed** tree (not `~/home_tracking_system` unless you run from there
+with the venv). Maro must be listening on port **8420**:
 
 ```bash
-mkdir -p tracking_engine/calibration/maro_cache
-curl -s http://127.0.0.1:8420/api/floorplan -o tracking_engine/calibration/maro_cache/floorplan.json
-curl -s http://127.0.0.1:8420/api/floorplan/bg -o tracking_engine/calibration/maro_cache/floorplan_bg.png
-curl -s http://127.0.0.1:8420/api/zones -o tracking_engine/calibration/maro_cache/zones.json
-curl -s http://127.0.0.1:8420/api/spots -o tracking_engine/calibration/maro_cache/spots.json
-curl -s http://127.0.0.1:8420/api/strips -o tracking_engine/calibration/maro_cache/strips.json
+cd /opt/tracking-system
+CACHE=/opt/tracking-system/tracking_engine/calibration/maro_cache
+mkdir -p "$CACHE"
+curl -sf http://127.0.0.1:8420/api/floorplan -o "$CACHE/floorplan.json"
+curl -sf http://127.0.0.1:8420/api/floorplan/bg -o "$CACHE/floorplan_bg.png"
+curl -sf http://127.0.0.1:8420/api/zones -o "$CACHE/zones.json"
+curl -sf http://127.0.0.1:8420/api/spots -o "$CACHE/spots.json"
+curl -sf http://127.0.0.1:8420/api/strips -o "$CACHE/strips.json"
+ls -la "$CACHE"
 ```
+
+If any `curl` fails, check Maro is up: `curl -sI http://127.0.0.1:8420/api/floorplan`.
 
 `calibrate_web` refreshes this cache automatically when the API is reachable.
 
 ## 2. Start calibration UI
 
-On the Pi (repo root):
+**Do not use system `python` / `pip`** on the Pi (PEP 668 blocks it). Use the install venv
+at `/opt/tracking-system/.venv` (created by `deploy/scripts/install.sh`).
+
+**Recommended — systemd** (survives logout, runs as `tracking` user):
 
 ```bash
-python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090
+sudo systemctl enable --now tracking-calibrate-web
+sudo systemctl status tracking-calibrate-web
+```
+
+**One-off in foreground** (debugging):
+
+```bash
+cd /opt/tracking-system
+export TRACKING_CONFIG=/opt/tracking-system/tracking_engine/config.multi_camera.yaml
+/opt/tracking-system/.venv/bin/python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090
+```
+
+From a git checkout under `~/home_tracking_system`, same idea:
+
+```bash
+cd ~/home_tracking_system
+export TRACKING_CONFIG=tracking_engine/config.multi_camera.yaml
+/opt/tracking-system/.venv/bin/python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090
 ```
 
 **From your laptop via SSH port-forward:**

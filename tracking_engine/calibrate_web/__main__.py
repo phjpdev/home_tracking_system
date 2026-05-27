@@ -114,9 +114,18 @@ def main() -> int:
     try:
         import uvicorn
     except ImportError:
+        venv_py = Path("/opt/tracking-system/.venv/bin/python")
+        hint = (
+            f"  {venv_py} -m tracking_engine.calibrate_web\n"
+            if venv_py.is_file()
+            else "  (on Pi after install.sh) /opt/tracking-system/.venv/bin/python -m tracking_engine.calibrate_web\n"
+        )
         print(
-            "[calibrate_web] uvicorn missing — run:\n"
-            "  python -m pip install 'fastapi>=0.110' 'uvicorn[standard]>=0.27'",
+            "[calibrate_web] uvicorn not found in this Python.\n"
+            "On the Pi, use the install venv (not system pip):\n"
+            + hint
+            + "Or: sudo systemctl enable --now tracking-calibrate-web\n"
+            "Off-repo laptop: python -m pip install 'fastapi>=0.110' 'uvicorn[standard]>=0.27'",
             file=sys.stderr,
         )
         return 2
