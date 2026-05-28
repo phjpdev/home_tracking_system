@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tracking System — Maro Plan Calibration</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">
+      <h1>Maro floor-plan calibration</h1>
+      <p class="subtitle">
+        Pick a visible landmark (door corner, lamp, strip). Click it on the Maro plan,
+        then click the same feature in every camera tile. <em>6+ pairs per camera</em>.
+        Use <em>Recapture all</em> when using live RTSP.
+      </p>
+    </div>
+    <div class="actions">
+      <button id="btn-recapture" type="button">Recapture all</button>
+      <button id="btn-compute" type="button">Recompute</button>
+      <button id="btn-save" type="button" class="primary">Save</button>
+      <button id="btn-download" type="button">Download session</button>
+      <label class="upload">
+        Load session
+        <input id="file-load" type="file" accept="application/json" hidden />
+      </label>
+    </div>
+    <div id="summary" class="summary"></div>
+  </header>
+
+  <main id="layout">
+    <section id="floor-panel">
+      <div class="panel-header">
+        <h2>Maro floor plan</h2>
+        <div class="position-controls">
+          <span class="pill">Mode:
+            <label><input type="radio" name="mode" value="point" checked> Point</label>
+            <label><input type="radio" name="mode" value="line"> Line</label>
+          </span>
+          <span class="pill" id="line-n-wrap" hidden>
+            Points/line:
+            <input id="line-n" type="number" min="2" max="20" value="3" style="width: 3em">
+          </span>
+          <span class="pill">
+            <label><input id="led-toggle" type="checkbox"> LED markers</label>
+          </span>
+          <span class="pill">Landmark: <strong id="sel-name">none</strong></span>
+          <button id="btn-add-position" type="button">+ Add landmark (click plan)</button>
+          <button id="btn-delete-position" type="button" class="danger">Delete</button>
+          <button id="btn-clear-all" type="button" class="danger">Clear all</button>
+        </div>
+      </div>
+      <div id="floor-wrap" class="floor-wrap">
+        <canvas id="floor-canvas"></canvas>
+      </div>
+      <ol id="position-list" class="position-list"></ol>
+    </section>
+
+    <section id="cameras-panel">
+      <div class="panel-header">
+        <h2>Cameras</h2>
+        <span class="hint">Click the same landmark in each tile. Toggle <em>not visible</em> if the feature is out of view.</span>
+      </div>
+      <div id="cam-grid" class="cam-grid"></div>
+    </section>
+  </main>
+
+  <div id="loupe" class="loupe" hidden>
+    <canvas id="loupe-canvas" width="120" height="120"></canvas>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
