@@ -33,7 +33,12 @@ Copy `cam_hallway_n.png` into `stills/` if calibrating from a laptop.
 Wide-angle distortion bends floor lines and breaks homography. Calibrate once:
 
 1. Print a chessboard (default inner corners **9×6**, 25 mm squares — count **inner** corners, not squares).
-2. Verify the camera first: `python tools/probe_rtsp.py --camera cam_hallway_n --save-stills /tmp/hallway_test`
+2. Verify the camera first:
+   ```bash
+   /opt/tracking-system/.venv/bin/python tools/probe_rtsp.py \
+     --config tracking_engine/config.multi_camera.yaml \
+     --camera cam_hallway_n --save-stills /tmp/hallway_test
+   ```
 3. Wave the board through the hallway camera FOV while capturing frames (use venv):
 
 ```bash

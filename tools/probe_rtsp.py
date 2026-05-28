@@ -13,6 +13,7 @@ Usage
    python tools/probe_rtsp.py
    python tools/probe_rtsp.py --frames 60 --timeout 8
    python tools/probe_rtsp.py --save-stills stills/   # save one PNG per camera
+   python tools/probe_rtsp.py --camera cam_hallway_n --save-stills /tmp/hallway_test
 
 Exit code is 0 iff every enabled stream produced at least one frame within
 ``--timeout`` seconds.
@@ -165,6 +166,13 @@ def main() -> int:
             "use this to verify whether a rotation override is actually needed"
         ),
     )
+    ap.add_argument(
+        "--camera",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="probe only these camera name(s); repeat for multiple (default: all enabled)",
+    )
     args = ap.parse_args()
 
     if not args.config.is_file():
@@ -172,11 +180,17 @@ def main() -> int:
         return 2
 
     streams = _load_streams(args.config)
+    if args.camera:
+        want = {str(n).strip() for n in args.camera if str(n).strip()}
+        streams = [s for s in streams if s["name"] in want]
+        if not streams:
+            print(f"[probe] no enabled stream matched --camera {sorted(want)}", file=sys.stderr)
+            return 2
     if not streams:
         print("[probe] no enabled streams in config", file=sys.stderr)
         return 2
 
-    print(f"[probe] checking {len(streams)} enabled stream(s) from {args.config}", file=sys.stderr)
+    print(f"[probe] checking {len(streams)} stream(s) from {args.config}", file=sys.stderr)
     results: list[dict[str, Any]] = []
     for s in streams:
         rot = 0 if args.no_rotate else int(s.get("rotate") or 0)
