@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DMX Binär-Referenz</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, monospace; background: #111; color: #eee; padding: 16px; }
+h1 { font-size: 16px; color: #888; margin-bottom: 4px; }
+.legend {
+  display: flex; align-items: center; gap: 16px;
+  margin-bottom: 16px; font-size: 12px; color: #666;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.dot-on  { width: 12px; height: 12px; border-radius: 50%; background: #10b981; }
+.dot-off { width: 12px; height: 12px; border-radius: 50%; background: #222; border: 1px solid #444; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 6px;
+}
+.card {
+  background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+  padding: 8px 8px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.num {
+  font-size: 22px; font-weight: 700; color: #f3f4f6; line-height: 1;
+}
+.bits {
+  display: flex; gap: 4px; align-items: flex-end;
+}
+.bit {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.bit-label { font-size: 8px; color: #555; }
+.bit-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.bit-dot.on  { background: #10b981; box-shadow: 0 0 4px #10b981aa; }
+.bit-dot.off { background: #222; border: 1px solid #333; }
+
+/* highlight powers of 2 */
+.card.pow2 { border-color: #10b98144; }
+.card.pow2 .num { color: #10b981; }
+</style>
+</head>
+<body>
+<h1>DMX Binär-Referenz — Kanal 1–8 · Werte 1–128</h1>
+<div class="legend">
+  <div class="legend-item"><div class="dot-on"></div> Kanal AN</div>
+  <div class="legend-item"><div class="dot-off"></div> Kanal AUS</div>
+  <span style="color:#10b981">Grüne Zahlen = Zweierpotenzen (nur 1 Kanal aktiv)</span>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+const grid = document.getElementById('grid');
+const BITS = 8;
+
+for (let n = 1; n <= 128; n++) {
+  const isPow2 = (n & (n - 1)) === 0;
+  const card = document.createElement('div');
+  card.className = 'card' + (isPow2 ? ' pow2' : '');
+
+  const num = document.createElement('div');
+  num.className = 'num';
+  num.textContent = n;
+
+  const bits = document.createElement('div');
+  bits.className = 'bits';
+
+  // Kanal 1 links → Kanal 8 rechts
+  for (let ch = 1; ch <= BITS; ch++) {
+    const val = 1 << (ch - 1);
+    const on = (n & val) !== 0;
+    const bit = document.createElement('div');
+    bit.className = 'bit';
+    bit.innerHTML = `
+      <div class="bit-label">${ch}</div>
+      <div class="bit-dot ${on ? 'on' : 'off'}"></div>`;
+    bits.appendChild(bit);
+  }
+
+  card.appendChild(num);
+  card.appendChild(bits);
+  grid.appendChild(card);
+}
+</script>
+</body>
+</html>

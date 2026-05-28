@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>DMX Planner</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1a2e; color: #e0e0e0;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 13px; padding: 20px;
+}
+h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+.sub { color: #555; font-size: 12px; margin-bottom: 20px; }
+
+.toolbar {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;
+}
+.add-btn {
+  padding: 7px 14px; border: 1px solid #444; border-radius: 6px;
+  background: #1a1a2e; color: #ccc; font-size: 12px; cursor: pointer;
+}
+.add-btn:hover { border-color: #888; color: #fff; }
+.add-btn.strip { border-color: #00b4d8; color: #00b4d8; }
+.add-btn.spot4 { border-color: #e9a820; color: #e9a820; }
+.add-btn.spot1 { border-color: #2ecc71; color: #2ecc71; }
+.add-btn.custom { border-color: #9b59b6; color: #9b59b6; }
+
+.sep { color: #333; margin: 0 4px; }
+
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; padding: 6px 8px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px; color: #555;
+  border-bottom: 1px solid #2a2a3a;
+}
+tbody tr { border-bottom: 1px solid #1e1e30; }
+tbody tr:hover { background: #1f1f35; }
+tbody tr.conflict { background: #2a1515; }
+tbody tr.conflict td { color: #e94560; }
+td { padding: 5px 8px; vertical-align: middle; }
+
+.badge {
+  display: inline-block; padding: 2px 7px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+}
+.badge.strip  { background: #0a2a3a; color: #00b4d8; border: 1px solid #00b4d8; }
+.badge.spot4  { background: #2a2000; color: #e9a820; border: 1px solid #e9a820; }
+.badge.spot1  { background: #0a2a1a; color: #2ecc71; border: 1px solid #2ecc71; }
+.badge.custom { background: #1a0a2a; color: #9b59b6; border: 1px solid #9b59b6; }
+
+.uni-badge {
+  display: inline-block; width: 28px; text-align: center;
+  padding: 2px 4px; border-radius: 3px; font-size: 10px; font-weight: 700;
+}
+
+.name-input {
+  background: transparent; border: none; color: #e0e0e0;
+  font-size: 12px; width: 120px; padding: 2px 4px;
+  border-bottom: 1px solid transparent;
+}
+.name-input:focus { outline: none; border-bottom-color: #444; }
+
+.addr-input {
+  background: #111; border: 1px solid #2a2a3a; color: #e0e0e0;
+  font-size: 12px; width: 52px; padding: 3px 6px; border-radius: 4px;
+  text-align: center;
+}
+.addr-input:focus { outline: none; border-color: #00b4d8; }
+.addr-input.manual { border-color: #e9a820; color: #e9a820; }
+.addr-input.conflict { border-color: #e94560; }
+
+.dip {
+  display: flex; gap: 3px; align-items: center;
+}
+.dip-sw {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #333; background: #111;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: #555; cursor: pointer; flex-shrink: 0;
+  transition: background 0.1s, border-color 0.1s;
+}
+.dip-sw.on { background: #e9a820; border-color: #e9a820; color: #000; font-weight: 700; }
+.dip-label { font-size: 9px; color: #444; margin-left: 2px; }
+
+.del-btn {
+  background: none; border: none; color: #444; cursor: pointer;
+  font-size: 16px; padding: 0 4px; line-height: 1;
+}
+.del-btn:hover { color: #e94560; }
+
+.ch-range { font-family: monospace; font-size: 11px; color: #888; }
+.ch-range .end { color: #555; }
+
+.section-header {
+  padding: 8px 8px 4px; font-size: 10px; font-weight: 700;
+  color: #555; text-transform: uppercase; letter-spacing: 1px;
+  background: #111; border-bottom: 1px solid #2a2a3a;
+}
+
+/* Universe color coding */
+.u1 { background: #1a2a1a; }
+.u2 { background: #1a1a2a; }
+.u3 { background: #2a1a1a; }
+.u4 { background: #1a2a2a; }
+.u5 { background: #2a1a2a; }
+
+.uni-1  { background: #1a4a2a; color: #2ecc71; }
+.uni-2  { background: #1a1a4a; color: #3498db; }
+.uni-3  { background: #4a1a1a; color: #e74c3c; }
+.uni-4  { background: #1a3a3a; color: #1abc9c; }
+.uni-5  { background: #3a1a3a; color: #9b59b6; }
+
+.stats {
+  margin-top: 16px; padding: 10px 14px; background: #111;
+  border: 1px solid #2a2a3a; border-radius: 6px;
+  display: flex; gap: 24px; flex-wrap: wrap;
+}
+.stat { }
+.stat .num { font-size: 18px; font-weight: 700; color: #fff; }
+.stat .lbl { font-size: 10px; color: #555; margin-top: 1px; }
+
+.export-btn {
+  padding: 6px 14px; border: 1px solid #333; border-radius: 6px;
+  background: #111; color: #888; font-size: 11px; cursor: pointer;
+}
+.export-btn:hover { border-color: #666; color: #ccc; }
+
+.auto-badge {
+  font-size: 9px; color: #555; margin-left: 3px; cursor: pointer;
+}
+.auto-badge:hover { color: #e9a820; }
+
+.channels-label { font-size: 10px; color: #888; }
+</style>
+</head>
+<body>
+
+<h1>DMX Planner</h1>
+<div class="sub">Kanalzuweisung für DMX-Decoder mit Binär-DIP-Schaltern</div>
+
+<div class="toolbar">
+  <button class="add-btn strip" onclick="addFixture('strip')">+ Strip WRGB (4ch)</button>
+  <button class="add-btn spot4" onclick="addFixture('spot4')">+ Spot 4ch</button>
+  <button class="add-btn spot1" onclick="addFixture('spot1')">+ Spot 1ch</button>
+  <button class="add-btn custom" onclick="addFixtureCustom()">+ Custom</button>
+  <span class="sep">|</span>
+  <button class="add-btn" onclick="autoAddress()" title="Alle Adressen neu berechnen (nur Auto-Fixtures)">↻ Auto-Adressierung</button>
+  <button class="add-btn" onclick="clearAll()" style="color:#e94560;border-color:#e94560">✕ Alles löschen</button>
+  <span class="sep" style="flex:1"></span>
+  <button class="export-btn" onclick="exportText()">Exportieren</button>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Name</th>
+      <th>Typ</th>
+      <th>Ch</th>
+      <th>Start-Adresse</th>
+      <th>Bereich</th>
+      <th>Uni</th>
+      <th style="min-width:200px">DIP-Schalter (1=LSB)</th>
+    </tr>
+  </thead>
+  <tbody id="fixture-table"></tbody>
+</table>
+
+<div class="stats" id="stats"></div>
+
+<script>
+// --- State ---
+const FIXTURE_TYPES = {
+  strip:  { label: 'Strip WRGB', channels: 4, chOrder: 'W R G B', color: 'strip' },
+  spot4:  { label: 'Spot 4ch',   channels: 4, chOrder: 'R G B W', color: 'spot4' },
+  spot1:  { label: 'Spot 1ch',   channels: 1, chOrder: 'W',       color: 'spot1' },
+};
+const UNI_COLORS = ['uni-1','uni-2','uni-3','uni-4','uni-5'];
+const CH_PER_UNI = 512;
+
+let fixtures = [];  // [{id, name, type, channels, startAddr, manual}]
+let nextId = 1;
+
+function load() {
+  try {
+    const s = localStorage.getItem('dmx_planner');
+    if (s) { const d = JSON.parse(s); fixtures = d.fixtures || []; nextId = d.nextId || 1; }
+  } catch(e) {}
+}
+function save() {
+  localStorage.setItem('dmx_planner', JSON.stringify({fixtures, nextId}));
+}
+
+// --- Addressing ---
+function computeAddresses() {
+  // Build sorted list, respect manual addresses
+  let cursor = 1;
+  for (const f of fixtures) {
+    if (!f.manual) {
+      // Find next free address
+      while (true) {
+        const end = cursor + f.channels - 1;
+        // Check no overlap with any manual fixture placed before
+        const overlap = fixtures.filter(o => o.manual).some(o => {
+          const oe = o.startAddr + o.channels - 1;
+          return cursor <= oe && end >= o.startAddr;
+        });
+        if (!overlap) break;
+        cursor++;
+      }
+      f.startAddr = cursor;
+    }
+    cursor = Math.max(cursor, f.startAddr + f.channels);
+  }
+}
+
+function autoAddress() {
+  // Reset all non-manual to re-sequence
+  let cursor = 1;
+  for (const f of fixtures) {
+    if (!f.manual) {
+      f.startAddr = cursor;
+    }
+    cursor = f.startAddr + f.channels;
+  }
+  save(); render();
+}
+
+function hasConflict(f) {
+  const end = f.startAddr + f.channels - 1;
+  return fixtures.some(o => o.id !== f.id && o.startAddr <= end && (o.startAddr + o.channels - 1) >= f.startAddr);
+}
+
+// --- Fixtures ---
+function addFixture(type) {
+  const def = FIXTURE_TYPES[type];
+  const count = fixtures.filter(f => f.type === type).length + 1;
+  const last = fixtures[fixtures.length - 1];
+  const startAddr = last ? last.startAddr + last.channels : 1;
+  fixtures.push({ id: nextId++, name: def.label + ' ' + count, type, channels: def.channels, startAddr, manual: false });
+  save(); render();
+}
+
+function addFixtureCustom() {
+  const chStr = prompt('Wie viele Kanäle?', '1');
+  const ch = parseInt(chStr);
+  if (isNaN(ch) || ch < 1 || ch > 512) return;
+  const last = fixtures[fixtures.length - 1];
+  const startAddr = last ? last.startAddr + last.channels : 1;
+  fixtures.push({ id: nextId++, name: 'Custom ' + ch + 'ch', type: 'custom', channels: ch, startAddr, manual: false });
+  save(); render();
+}
+
+function deleteFixture(id) {
+  fixtures = fixtures.filter(f => f.id !== id);
+  save(); render();
+}
+
+function clearAll() {
+  if (!confirm('Alle Fixtures löschen?')) return;
+  fixtures = []; nextId = 1;
+  save(); render();
+}
+
+function updateName(id, val) {
+  const f = fixtures.find(f => f.id === id);
+  if (f) { f.name = val; save(); }
+}
+
+function updateAddr(id, val) {
+  const f = fixtures.find(f => f.id === id);
+  if (!f) return;
+  const v = parseInt(val);
+  if (!isNaN(v) && v >= 1 && v <= 512) {
+    f.startAddr = v;
+    f.manual = true;
+  }
+  save(); render();
+}
+
+function clearManual(id) {
+  const f = fixtures.find(f => f.id === id);
+  if (f) { f.manual = false; autoAddress(); }
+}
+
+function universe(addr) { return Math.floor((addr - 1) / CH_PER_UNI) + 1; }
+function chInUni(addr) { return ((addr - 1) % CH_PER_UNI) + 1; }
+
+// --- DIP switches ---
+// Convention: 9 switches, SW1=bit0(1), SW2=bit1(2), ..., SW9=bit8(256)
+// address = binary_value + 1  →  binary_value = address - 1
+function addrToDip(addr) {
+  const v = addr - 1;  // 0-indexed binary value
+  const bits = [];
+  for (let i = 0; i < 9; i++) bits.push((v >> i) & 1);
+  return bits;  // bits[0]=SW1(LSB), bits[8]=SW9(MSB)
+}
+
+function dipToAddr(bits) {
+  let v = 0;
+  for (let i = 0; i < 9; i++) if (bits[i]) v |= (1 << i);
+  return v + 1;
+}
+
+function toggleDip(fixtureId, swIdx) {
+  const f = fixtures.find(f => f.id === fixtureId);
+  if (!f) return;
+  const bits = addrToDip(f.startAddr);
+  bits[swIdx] ^= 1;
+  f.startAddr = dipToAddr(bits);
+  f.manual = true;
+  save(); render();
+}
+
+// --- Render ---
+function render() {
+  computeAddresses();
+  const tbody = document.getElementById('fixture-table');
+  tbody.innerHTML = '';
+
+  // Group by universe for section headers
+  let lastUni = 0;
+
+  fixtures.forEach((f, idx) => {
+    const conflict = hasConflict(f);
+    const endAddr = f.startAddr + f.channels - 1;
+    const uni = universe(f.startAddr);
+    const localStart = chInUni(f.startAddr);
+    const localEnd = chInUni(endAddr);
+    const bits = addrToDip(f.startAddr);
+    const def = FIXTURE_TYPES[f.type] || { label: 'Custom', chOrder: '', color: 'custom' };
+    const uniColor = UNI_COLORS[(uni - 1) % UNI_COLORS.length];
+
+    if (uni !== lastUni) {
+      const hdr = document.createElement('tr');
+      hdr.innerHTML = `<td colspan="8" class="section-header">Universe ${uni} &nbsp;·&nbsp; Ch ${(uni-1)*512+1}–${uni*512}</td>`;
+      tbody.appendChild(hdr);
+      lastUni = uni;
+    }
+
+    const tr = document.createElement('tr');
+    if (conflict) tr.classList.add('conflict');
+
+    // DIP switches HTML
+    const dipVal = f.startAddr - 1;
+    const dipHtml = bits.map((b, i) =>
+      `<span class="dip-sw ${b ? 'on' : ''}" onclick="toggleDip(${f.id},${i})" title="SW${i+1} = ${1<<i}">${i+1}</span>`
+    ).join('') + `<span class="dip-label">${dipVal.toString(2).padStart(9,'0')} = ${f.startAddr}</span>`;
+
+    const addrClass = conflict ? 'conflict' : (f.manual ? 'manual' : '');
+    const manualBadge = f.manual ? `<span class="auto-badge" onclick="clearManual(${f.id})" title="Manual — klicken zum Zurücksetzen auf Auto">●</span>` : '';
+
+    tr.innerHTML = `
+      <td style="color:#444">${idx+1}</td>
+      <td><input class="name-input" value="${esc(f.name)}" onchange="updateName(${f.id},this.value)" onblur="updateName(${f.id},this.value)"></td>
+      <td><span class="badge ${def.color}">${def.label}</span></td>
+      <td class="channels-label">${f.channels}ch${def.chOrder ? '<br><span style="color:#444;font-size:9px">' + def.chOrder + '</span>' : ''}</td>
+      <td>
+        <input class="addr-input ${addrClass}" type="number" min="1" max="512" value="${f.startAddr}"
+          onchange="updateAddr(${f.id},this.value)" onblur="updateAddr(${f.id},this.value)">
+        ${manualBadge}
+      </td>
+      <td class="ch-range">${localStart}<span class="end">${f.channels > 1 ? '–'+localEnd : ''}</span></td>
+      <td><span class="uni-badge ${uniColor}">U${uni}</span></td>
+      <td><div class="dip">${dipHtml}</div></td>
+      <td><button class="del-btn" onclick="deleteFixture(${f.id})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderStats();
+}
+
+function renderStats() {
+  const totalCh = fixtures.reduce((s, f) => s + f.channels, 0);
+  const maxAddr = fixtures.reduce((m, f) => Math.max(m, f.startAddr + f.channels - 1), 0);
+  const unis = maxAddr > 0 ? Math.ceil(maxAddr / CH_PER_UNI) : 0;
+  const conflicts = fixtures.filter(f => hasConflict(f)).length;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="num">${fixtures.length}</div><div class="lbl">Fixtures</div></div>
+    <div class="stat"><div class="num">${totalCh}</div><div class="lbl">Kanäle gesamt</div></div>
+    <div class="stat"><div class="num">${maxAddr || '–'}</div><div class="lbl">Letzte Adresse</div></div>
+    <div class="stat"><div class="num">${unis || '–'}</div><div class="lbl">Universen</div></div>
+    ${conflicts ? `<div class="stat"><div class="num" style="color:#e94560">${conflicts}</div><div class="lbl" style="color:#e94560">Konflikte</div></div>` : ''}
+  `;
+}
+
+function esc(s) { return s.replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+// --- Export ---
+function exportText() {
+  let out = 'DMX Kanalplan\n' + '='.repeat(60) + '\n\n';
+  let lastUni = 0;
+  fixtures.forEach((f, i) => {
+    const uni = universe(f.startAddr);
+    if (uni !== lastUni) {
+      if (lastUni) out += '\n';
+      out += `--- Universe ${uni} (Ch ${(uni-1)*512+1}–${uni*512}) ---\n`;
+      lastUni = uni;
+    }
+    const end = f.startAddr + f.channels - 1;
+    const bits = addrToDip(f.startAddr);
+    const dipStr = bits.map((b,i) => b ? `SW${i+1}` : '').filter(Boolean).join('+') || 'alle OFF';
+    const def = FIXTURE_TYPES[f.type] || { label: 'Custom', chOrder: '' };
+    out += `${String(i+1).padStart(2)}. ${f.name.padEnd(20)} Ch ${String(f.startAddr).padStart(3)}–${String(end).padEnd(3)}  ${def.label.padEnd(12)}  DIP: ${dipStr}\n`;
+  });
+  const blob = new Blob([out], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dmx_kanalplan.txt';
+  a.click();
+}
+
+// Init
+load();
+if (fixtures.length === 0) {
+  // Example setup
+  fixtures.push({ id: nextId++, name: 'Strip WRGB 1', type: 'strip', channels: 4, startAddr: 1,  manual: false });
+  fixtures.push({ id: nextId++, name: 'Strip WRGB 2', type: 'strip', channels: 4, startAddr: 5,  manual: false });
+  fixtures.push({ id: nextId++, name: 'Spot 1',       type: 'spot1', channels: 1, startAddr: 9,  manual: false });
+  fixtures.push({ id: nextId++, name: 'Spot 2',       type: 'spot4', channels: 4, startAddr: 10, manual: false });
+  save();
+}
+render();
+</script>
+</body>
+</html>
