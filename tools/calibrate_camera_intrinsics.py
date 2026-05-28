@@ -73,20 +73,33 @@ def _collect_from_stream(
     pattern_size: tuple[int, int],
     max_frames: int,
     min_good: int,
+    settle_sec: float = 0.0,
+    save_debug: Path | None = None,
 ) -> tuple[list[np.ndarray], list[np.ndarray], tuple[int, int]]:
     objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
     objp[:, :2] = np.mgrid[0 : pattern_size[0], 0 : pattern_size[1]].T.reshape(-1, 2)
     objpoints: list[np.ndarray] = []
     imgpoints: list[np.ndarray] = []
     image_size: tuple[int, int] | None = None
+    frames_read = 0
+    last_frame: np.ndarray | None = None
 
-    for _ in range(max_frames * 3):
+    if settle_sec > 0:
+        import time
+
+        print(f"  waiting {settle_sec:.1f}s for RTSP to stabilize...", flush=True)
+        time.sleep(settle_sec)
+
+    attempts = max(max_frames * 5, 60)
+    for _ in range(attempts):
         if len(objpoints) >= max_frames:
             break
         ok, frame = cap.read()
         if not ok or frame is None:
             continue
+        frames_read += 1
         frame = _apply_rotate(frame, rotate)
+        last_frame = frame
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         found, corners = _find_corners(gray, pattern_size)
         if not found or corners is None:
@@ -98,9 +111,20 @@ def _collect_from_stream(
         print(f"  corner frame {len(objpoints)}/{max_frames}", flush=True)
 
     if image_size is None or len(objpoints) < min_good:
+        if save_debug and last_frame is not None:
+            save_debug.mkdir(parents=True, exist_ok=True)
+            out = save_debug / "last_frame_no_chessboard.jpg"
+            cv2.imwrite(str(out), last_frame)
+            print(f"  saved debug frame to {out}", flush=True)
         raise RuntimeError(
             f"need >= {min_good} chessboard detections, got {len(objpoints)} "
-            f"(pattern inner corners {pattern_size[0]}x{pattern_size[1]})"
+            f"(pattern inner corners {pattern_size[0]}x{pattern_size[1]}, "
+            f"frames_read={frames_read}).\n"
+            "This tool does NOT use Maro — only the camera RTSP + a physical chessboard.\n"
+            "Check: (1) print a checkerboard and fill most of the hallway view, "
+            "(2) --cols/--rows match INNER corners (9x6 default), "
+            "(3) probe_rtsp saves a still first, "
+            "(4) use /opt/tracking-system/.venv/bin/python."
         )
     return objpoints, imgpoints, image_size
 
@@ -118,6 +142,18 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=30, help="max good frames to collect from stream")
     ap.add_argument("--min-frames", type=int, default=12, help="minimum good frames required")
     ap.add_argument("--preview", action="store_true", help="show last undistorted preview window")
+    ap.add_argument(
+        "--settle-sec",
+        type=float,
+        default=3.0,
+        help="seconds to wait after opening RTSP before sampling (default 3)",
+    )
+    ap.add_argument(
+        "--save-debug",
+        type=Path,
+        default=None,
+        help="if detection fails, write last frame here (e.g. /tmp/hallway_debug)",
+    )
     args = ap.parse_args()
 
     pattern_size = (args.cols, args.rows)
@@ -159,6 +195,7 @@ def main() -> int:
         if not url:
             print("no rtsp_url", file=sys.stderr)
             return 2
+        print(f"  RTSP {args.camera} rotate={rotate} url={url[:60]}...", flush=True)
         cap = open_rtsp_latest(url)
 
     try:
@@ -168,6 +205,8 @@ def main() -> int:
             pattern_size=pattern_size,
             max_frames=args.frames,
             min_good=args.min_frames,
+            settle_sec=0.0 if args.images else float(args.settle_sec),
+            save_debug=args.save_debug,
         )
     finally:
         if hasattr(cap, "release"):

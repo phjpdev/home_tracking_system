@@ -28,21 +28,28 @@ Copy `cam_hallway_n.png` into `stills/` if calibrating from a laptop.
 
 ## Step 2 — Lens undistortion (recommended)
 
+**Does not need Maro** — only the hallway camera RTSP (192.168.178.74) and a **printed chessboard**.
+
 Wide-angle distortion bends floor lines and breaks homography. Calibrate once:
 
-1. Print a chessboard (default inner corners **9×6**, 25 mm squares — adjust flags if needed).
-2. Wave the board through the hallway camera FOV while capturing frames:
+1. Print a chessboard (default inner corners **9×6**, 25 mm squares — count **inner** corners, not squares).
+2. Verify the camera first: `python tools/probe_rtsp.py --camera cam_hallway_n --save-stills /tmp/hallway_test`
+3. Wave the board through the hallway camera FOV while capturing frames (use venv):
 
 ```bash
-python tools/calibrate_camera_intrinsics.py \
+cd /opt/tracking-system
+/opt/tracking-system/.venv/bin/python tools/calibrate_camera_intrinsics.py \
   --camera cam_hallway_n \
   --config tracking_engine/config.multi_camera.yaml \
-  --frames 40 --min-frames 12
+  --frames 40 --settle-sec 5 \
+  --save-debug /tmp/hallway_debug
 ```
 
-3. Confirm `tracking_engine/calibration/camera_intrinsics.json` contains `cam_hallway_n`
+If you get `got 0 chessboard detections`: no checkerboard was seen (wrong pattern size, board too small/far, or RTSP not delivering frames). Check `/tmp/hallway_debug/last_frame_no_chessboard.jpg`.
+
+4. Confirm `tracking_engine/calibration/camera_intrinsics.json` contains `cam_hallway_n`
    with `K`, `dist`, and `image_size` `[704, 576]`.
-4. Restart `tracking-calibrate-web` and `tracking-engine` so undistort maps reload.
+5. Restart `tracking-calibrate-web` and `tracking-engine` so undistort maps reload.
 
 **Acceptance:** Side-by-side before/after on a still — tile grout lines near the image edges
 should be straight.
