@@ -166,24 +166,29 @@ def cmd_on(args: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--maro-base", default=MARO_BASE, help="Maro API base URL")
-    ap.add_argument(
+
+    # Shared options live on each subcommand so they go AFTER it,
+    # e.g. ``spots.py off --no-maro`` / ``spots.py on --maro-base ...``.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--maro-base", default=MARO_BASE, help="Maro API base URL")
+    common.add_argument(
         "--no-maro",
         action="store_true",
         help="do not pause/re-enable Maro Art-Net (e.g. Maro is down)",
     )
+
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_check = sub.add_parser("check", help="probe ODE/Pixelator reachability")
+    p_check = sub.add_parser("check", parents=[common], help="probe ODE/Pixelator reachability")
     p_check.set_defaults(func=cmd_check)
 
-    p_on = sub.add_parser("on", help="flood spot universes full-on and hold")
+    p_on = sub.add_parser("on", parents=[common], help="flood spot universes full-on and hold")
     p_on.add_argument("--value", type=int, default=255, help="DMX value per channel (0-255)")
     p_on.add_argument("--seconds", type=float, default=0.0, help="auto-blackout after N seconds (0 = until Ctrl+C)")
     p_on.add_argument("--refresh", type=float, default=2.0, help="re-send interval while holding (seconds)")
     p_on.set_defaults(func=cmd_on)
 
-    p_off = sub.add_parser("off", help="blackout spot universes")
+    p_off = sub.add_parser("off", parents=[common], help="blackout spot universes")
     p_off.set_defaults(func=cmd_off)
 
     args = ap.parse_args()
