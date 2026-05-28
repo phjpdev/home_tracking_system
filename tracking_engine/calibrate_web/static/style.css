@@ -181,12 +181,14 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .position-list li .cam-count { color: var(--ink-dim); }
 
 .cam-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* Wrap tiles at their natural size — no stretching, no scaling */
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   min-height: 0;
+  align-content: flex-start;
 }
 
 .cam-tile {
@@ -196,6 +198,7 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  width: max-content;     /* shrink-wrap around native image */
 }
 .cam-tile .header {
   display: flex;
@@ -217,13 +220,20 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .cam-tile .frame {
   position: relative;
   background: #050709;
-  aspect-ratio: 4 / 3;
+  width: 100%;
+  /* Tile height adapts to image aspect — using padding-bottom trick would
+     hard-code one ratio. Instead, use a fixed-ish max-height + contain. */
   cursor: crosshair;
   overflow: hidden;
-  display: grid;
-  place-items: center;
 }
-.cam-tile .frame img { max-width: 100%; max-height: 100%; display: block; user-select: none; pointer-events: none; }
+.cam-tile .frame img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: none;          /* show 1:1 native pixels — no scaling */
+  user-select: none;
+  pointer-events: none;
+}
 .cam-tile .frame .no-frame { color: var(--ink-dim); font-size: 12px; padding: 12px; text-align: center; }
 
 .cam-tile .overlay {

@@ -10,6 +10,17 @@ const state = {
   snapshots: {},
   computeResult: null,
   computeInFlight: false,
+  // Line mode state
+  mode: "point",                 // "point" | "line" | "led"
+  lineN: 3,                      // number of landmarks per line (>=2)
+  pendingPlanStart: null,        // [u,v] first plan click waiting for the second
+  pendingLineGroup: null,        // {id, landmarkIds:[id,…]} after both plan clicks
+  lineGroups: [],                // [{id, landmarkIds, planLine:[start,end]}]
+  camPendingLineStart: {},       // { camName: [u,v] } — first cam click waiting for the second
+  // LED marker overlay state
+  ledOn: false,                  // whether the visual + physical markers are active
+  ledStrips: [],                 // [{name, num_markers, markers:[{idx, mm, plan_px}], …}]
+  ledLitPerStrip: {},            // { strip_name: [{idx, plan_px:[x,y]}, …] } — only LIT markers
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -153,18 +164,21 @@ function drawFloorCanvas() {
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  for (const st of ov.strips || []) {
-    const pts = st.points_px || [];
-    if (pts.length < 2) continue;
-    ctx.beginPath();
-    pts.forEach((p, i) => {
-      const [x, y] = planPxToCanvas(p[0], p[1], canvas);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = "rgba(255, 200, 80, 0.5)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  // Strip path lines — hidden when LED markers are active (markers replace the visualization)
+  if (!state.ledOn) {
+    for (const st of ov.strips || []) {
+      const pts = st.points_px || [];
+      if (pts.length < 2) continue;
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const [x, y] = planPxToCanvas(p[0], p[1], canvas);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = "rgba(255, 200, 80, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }
   for (const s of ov.spots || []) {
     const [x, y] = planPxToCanvas(s.x_px, s.y_px, canvas);
@@ -173,6 +187,77 @@ function drawFloorCanvas() {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255, 220, 100, 0.35)";
     ctx.fill();
+  }
+
+  // LED-marker clusters drawn as glowing line segments (one per lit run).
+  // We only show start + end + line — the calibration uses those endpoints anyway.
+  if (state.ledOn) {
+    for (const [stripName, markers] of Object.entries(state.ledLitPerStrip || {})) {
+      if (!markers || markers.length === 0) continue;
+      // Group consecutive indices into clusters (gap > 1 starts new cluster)
+      const clusters = [];
+      let cur = [];
+      for (const m of markers) {
+        if (cur.length === 0 || m.idx === cur[cur.length - 1].idx + 1) cur.push(m);
+        else { clusters.push(cur); cur = [m]; }
+      }
+      if (cur.length) clusters.push(cur);
+
+      for (const cluster of clusters) {
+        const start = cluster[0].plan_px;
+        const end = cluster[cluster.length - 1].plan_px;
+        const [x0, y0] = planPxToCanvas(start[0], start[1], canvas);
+        const [x1, y1] = planPxToCanvas(end[0], end[1], canvas);
+
+        // Outer glow line (wider, soft)
+        ctx.beginPath();
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        ctx.strokeStyle = "rgba(255, 240, 120, 0.22)";
+        ctx.lineWidth = 9;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // Core line
+        ctx.beginPath();
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        ctx.strokeStyle = "#fff0a0";
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Lines between paired landmarks (line groups)
+  for (const grp of state.lineGroups) {
+    const pts = grp.landmarkIds
+      .map((id) => state.positions.find((p) => p.id === id))
+      .filter(Boolean);
+    if (pts.length < 2) continue;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const [x, y] = planPxToCanvas(p.world_xy_plan_px[0], p.world_xy_plan_px[1], canvas);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "rgba(80, 200, 255, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Pending line start indicator (waiting for the second click)
+  if (state.pendingPlanStart) {
+    const [x, y] = planPxToCanvas(state.pendingPlanStart[0], state.pendingPlanStart[1], canvas);
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(80, 200, 255, 0.7)";
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 10px system-ui";
+    ctx.fillText("start", x + 12, y + 4);
   }
 
   for (const pos of state.positions) {
@@ -214,6 +299,7 @@ function floorCanvasClick(ev) {
   const cy = ev.clientY - rect.top;
   const [u, v] = canvasToPlanPx(cx, cy, canvas);
 
+  // Click on existing landmark → select it (works in both modes)
   for (const pos of state.positions) {
     const [px, py] = planPxToCanvas(pos.world_xy_plan_px[0], pos.world_xy_plan_px[1], canvas);
     if (Math.hypot(px - cx, py - cy) < 14) {
@@ -222,6 +308,12 @@ function floorCanvasClick(ev) {
     }
   }
 
+  if (state.mode === "line") {
+    handleLinePlanClick(u, v);
+    return;
+  }
+
+  // Point mode — single landmark per click (original behaviour).
   const id = uuid();
   state.positions.push({
     id,
@@ -230,6 +322,51 @@ function floorCanvasClick(ev) {
     notVisible: {},
   });
   selectPosition(id);
+  markDirty();
+}
+
+function handleLinePlanClick(u, v) {
+  if (!state.pendingPlanStart) {
+    // First click: store start, wait for second
+    state.pendingPlanStart = [Math.round(u), Math.round(v)];
+    drawFloorCanvas();
+    toast("Line start set — click the line endpoint.", "");
+    return;
+  }
+  // Second click: create N landmarks evenly distributed start→end
+  const N = Math.max(2, Math.min(20, parseInt(state.lineN, 10) || 3));
+  const [x0, y0] = state.pendingPlanStart;
+  const x1 = Math.round(u), y1 = Math.round(v);
+  const landmarkIds = [];
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    const x = Math.round(x0 + (x1 - x0) * t);
+    const y = Math.round(y0 + (y1 - y0) * t);
+    const id = uuid();
+    state.positions.push({
+      id,
+      world_xy_plan_px: [x, y],
+      clicks: {},
+      notVisible: {},
+      lineGroupId: null,  // filled below
+    });
+    landmarkIds.push(id);
+  }
+  const groupId = "G-" + Math.random().toString(36).slice(2, 8);
+  for (const id of landmarkIds) {
+    const p = state.positions.find((q) => q.id === id);
+    p.lineGroupId = groupId;
+  }
+  state.lineGroups.push({
+    id: groupId,
+    landmarkIds,
+    planLine: [[x0, y0], [x1, y1]],
+  });
+  state.pendingPlanStart = null;
+  state.pendingLineGroup = groupId;
+  state.camPendingLineStart = {};
+  selectPosition(landmarkIds[0]);
+  toast(`Line created (${N} pts). Click 2 endpoints in each camera that sees it.`, "");
   markDirty();
 }
 
@@ -353,6 +490,45 @@ function renderCameraGrid() {
       });
       frame.addEventListener("mouseleave", hideLoupe);
       frame.addEventListener("click", (ev) => {
+        const ir = img.getBoundingClientRect();
+        const u = ((ev.clientX - ir.left) / ir.width) * Number(img.dataset.w);
+        const v = ((ev.clientY - ir.top) / ir.height) * Number(img.dataset.h);
+
+        // Line mode: 2 clicks per camera, interpolate N positions on the line
+        if (state.mode === "line" && state.pendingLineGroup) {
+          const grp = state.lineGroups.find((g) => g.id === state.pendingLineGroup);
+          if (!grp) {
+            toast("Line group missing — set a line on the plan first.", "warn");
+            return;
+          }
+          const start = state.camPendingLineStart[cam.name];
+          if (!start) {
+            state.camPendingLineStart[cam.name] = [Math.round(u), Math.round(v)];
+            toast(`${cam.name}: start set, click line end.`, "");
+            renderCameraGrid();
+            return;
+          }
+          // Second click → interpolate clicks for the N landmarks of this line group
+          const N = grp.landmarkIds.length;
+          for (let i = 0; i < N; i++) {
+            const t = i / (N - 1);
+            const cu = Math.round(start[0] + (u - start[0]) * t);
+            const cv = Math.round(start[1] + (v - start[1]) * t);
+            const lm = state.positions.find((p) => p.id === grp.landmarkIds[i]);
+            if (lm) {
+              lm.clicks[cam.name] = [cu, cv];
+              delete lm.notVisible[cam.name];
+            }
+          }
+          delete state.camPendingLineStart[cam.name];
+          toast(`${cam.name}: ${N} line points assigned ✓`, "good");
+          markDirty();
+          renderCameraGrid();
+          renderPositionList();
+          return;
+        }
+
+        // Point mode (or line mode without pending group): original single-landmark behaviour
         if (!pos) {
           toast("Add or select a landmark on the plan first.", "warn");
           return;
@@ -361,31 +537,88 @@ function renderCameraGrid() {
           toast("Mark visible first.", "warn");
           return;
         }
-        const ir = img.getBoundingClientRect();
-        const u = ((ev.clientX - ir.left) / ir.width) * Number(img.dataset.w);
-        const v = ((ev.clientY - ir.top) / ir.height) * Number(img.dataset.h);
         pos.clicks[cam.name] = [Math.round(u), Math.round(v)];
         delete pos.notVisible[cam.name];
         markDirty();
+        renderCameraGrid();
+        renderPositionList();
       });
-      if (click) {
-        const overlay = document.createElement("div");
-        overlay.className = "overlay";
-        frame.appendChild(overlay);
-        requestAnimationFrame(() => {
-          const ir = img.getBoundingClientRect();
-          const fr = frame.getBoundingClientRect();
-          const px =
-            ir.left - fr.left + (click[0] / Number(img.dataset.w)) * ir.width;
-          const py =
-            ir.top - fr.top + (click[1] / Number(img.dataset.h)) * ir.height;
-          const col = isWorst ? "#e74c3c" : "#3aa6ff";
+      // Render overlay: dots for clicks + lines for line groups + pending-start indicator
+      const overlay = document.createElement("div");
+      overlay.className = "overlay";
+      frame.appendChild(overlay);
+      requestAnimationFrame(() => {
+        const ir = img.getBoundingClientRect();
+        const fr = frame.getBoundingClientRect();
+        const W = Number(img.dataset.w), H = Number(img.dataset.h);
+        const toCanvas = (u, v) => [
+          ir.left - fr.left + (u / W) * ir.width,
+          ir.top - fr.top + (v / H) * ir.height,
+        ];
+
+        const svgParts = [];
+
+        // Collect clicks for this camera, grouped by line group
+        const lineGroupClicks = {};   // groupId → [{lmId, click}]
+        const standaloneClicks = [];  // for point-mode landmarks
+        for (const p of state.positions) {
+          const c = p.clicks && p.clicks[cam.name];
+          if (!c) continue;
+          if (p.lineGroupId) {
+            (lineGroupClicks[p.lineGroupId] = lineGroupClicks[p.lineGroupId] || []).push({ p, c });
+          } else {
+            standaloneClicks.push({ p, c });
+          }
+        }
+
+        // Draw connecting lines for line groups (in order of landmarks within group)
+        for (const grp of state.lineGroups) {
+          const entries = (lineGroupClicks[grp.id] || []).slice();
+          if (entries.length < 2) continue;
+          // Sort by order of landmarkIds in the group
+          entries.sort(
+            (a, b) =>
+              grp.landmarkIds.indexOf(a.p.id) - grp.landmarkIds.indexOf(b.p.id)
+          );
+          const pts = entries.map((e) => toCanvas(e.c[0], e.c[1]));
+          const d = pts.map((p, i) => (i === 0 ? `M ${p[0]} ${p[1]}` : `L ${p[0]} ${p[1]}`)).join(" ");
+          svgParts.push(
+            `<path d="${d}" fill="none" stroke="rgba(80,200,255,0.85)" stroke-width="2"/>`
+          );
+        }
+
+        // Draw all click dots
+        const allClicks = [
+          ...Object.values(lineGroupClicks).flat(),
+          ...standaloneClicks,
+        ];
+        for (const { p, c } of allClicks) {
+          const [px, py] = toCanvas(c[0], c[1]);
+          const isHere = pos && pos.id === p.id;
+          const isWorstHere =
+            cr && cr.worst_position_id && cr.worst_position_id === p.id;
+          const col = isWorstHere ? "#e74c3c" : isHere ? "#3aa6ff" : "rgba(80,200,255,0.85)";
+          const r = isHere ? 6 : 4.5;
+          svgParts.push(
+            `<circle cx="${px}" cy="${py}" r="${r}" fill="${col}" stroke="#fff" stroke-width="2"/>`
+          );
+        }
+
+        // Pending line start (waiting for second click in this camera)
+        if (state.mode === "line" && state.camPendingLineStart[cam.name]) {
+          const [pu, pv] = state.camPendingLineStart[cam.name];
+          const [px, py] = toCanvas(pu, pv);
+          svgParts.push(
+            `<circle cx="${px}" cy="${py}" r="7" fill="rgba(80,200,255,0.55)" stroke="#fff" stroke-width="2" stroke-dasharray="3,2"/>`,
+            `<text x="${px + 9}" y="${py + 4}" font-size="10" font-weight="bold" fill="#fff">start</text>`
+          );
+        }
+
+        if (svgParts.length > 0) {
           overlay.innerHTML =
-            `<svg width="100%" height="100%" style="position:absolute;inset:0">` +
-            `<circle cx="${px}" cy="${py}" r="6" fill="${col}" stroke="#fff" stroke-width="2"/>` +
-            `</svg>`;
-        });
-      }
+            `<svg width="100%" height="100%" style="position:absolute;inset:0">${svgParts.join("")}</svg>`;
+        }
+      });
     } else {
       const ph = document.createElement("div");
       ph.className = "no-frame";
@@ -589,6 +822,24 @@ function loadSessionFile(file) {
   reader.readAsText(file);
 }
 
+// ---------- LED marker overlay (visual helper, no click semantics) ----------
+
+async function loadLedStrips() {
+  try {
+    const r = await api("GET", "/api/led/strips");
+    state.ledStrips = r.strips || [];
+  } catch (e) {
+    toast("LED strips load failed: " + e.message, "bad");
+    state.ledStrips = [];
+  }
+}
+
+async function ledTurnOff() {
+  try {
+    await api("POST", "/api/led/off", {});
+  } catch (_) {}
+}
+
 function attachEvents() {
   $("#floor-canvas").addEventListener("click", floorCanvasClick);
   $("#floor-canvas").addEventListener("mousemove", (ev) => {
@@ -605,6 +856,67 @@ function attachEvents() {
     toast("Click a landmark on the Maro plan.", "")
   );
   $("#btn-delete-position").addEventListener("click", deleteSelectedPosition);
+  $("#btn-clear-all").addEventListener("click", () => {
+    if (state.positions.length === 0) return;
+    if (!confirm(`Clear all ${state.positions.length} landmarks?`)) return;
+    state.positions = [];
+    state.lineGroups = [];
+    state.pendingPlanStart = null;
+    state.pendingLineGroup = null;
+    state.camPendingLineStart = {};
+    state.selectedPositionId = null;
+    state.computeResult = null;
+    renderPositionList();
+    renderCameraGrid();
+    drawFloorCanvas();
+    toast("All landmarks cleared", "good");
+  });
+  // Mode toggle (Point / Line — pure click semantics)
+  document.querySelectorAll('input[name="mode"]').forEach((r) => {
+    r.addEventListener("change", (ev) => {
+      state.mode = ev.target.value;
+      state.pendingPlanStart = null;
+      state.camPendingLineStart = {};
+      $("#line-n-wrap").hidden = state.mode !== "line";
+      drawFloorCanvas();
+      renderCameraGrid();
+      toast(`Mode: ${state.mode}`, "");
+    });
+  });
+  $("#line-n").addEventListener("change", (ev) => {
+    const n = Math.max(2, Math.min(20, parseInt(ev.target.value, 10) || 3));
+    state.lineN = n;
+    ev.target.value = n;
+  });
+
+  // LED markers toggle — visual helper only (lights dotted pattern + shows dots on plan)
+  $("#led-toggle").addEventListener("change", async (ev) => {
+    state.ledOn = ev.target.checked;
+    if (state.ledOn) {
+      try {
+        const r = await api("POST", "/api/led/all_markers", {
+          rgbw: [255, 255, 255, 255],
+          on_markers: 5,    // 50 cm lit block
+          off_markers: 5,   // 50 cm dark gap
+        });
+        state.ledLitPerStrip = r.lit_with_px || {};
+        toast(`LED ON — ${Object.values(state.ledLitPerStrip).flat().length} markers across all strips`, "good");
+      } catch (e) {
+        toast("LED on failed: " + e.message, "bad");
+        ev.target.checked = false;
+        state.ledOn = false;
+      }
+    } else {
+      state.ledLitPerStrip = {};
+      await ledTurnOff();
+      toast("LED markers OFF", "");
+    }
+    drawFloorCanvas();
+  });
+  window.addEventListener("beforeunload", () => {
+    navigator.sendBeacon &&
+      navigator.sendBeacon("/api/led/off", new Blob(["{}"], { type: "application/json" }));
+  });
   $("#file-load").addEventListener("change", (ev) => {
     const f = ev.target.files && ev.target.files[0];
     if (f) loadSessionFile(f);

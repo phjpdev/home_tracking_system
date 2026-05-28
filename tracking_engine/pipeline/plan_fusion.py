@@ -51,6 +51,11 @@ class PlanFusionConfig:
     ema_alpha: float = 0.35
     ema_reset_gap_sec: float = 2.0
     drop_outside_zones: bool = True
+    # Velocity outlier gate — reject single-frame jumps above this speed.
+    # plan is ~6.4 mm/px, so 800 px/s ≈ 5 m/s (running). 1500 px/s ≈ 9.6 m/s (sprint).
+    max_speed_pxps: float = 1500.0
+    # After this many consecutive outliers, accept the new value (real teleport / re-id swap).
+    outlier_release_after: int = 5
 
 
 class PlanFusionCoordinator:
@@ -59,6 +64,7 @@ class PlanFusionCoordinator:
         self._zones = zones
         self._ema: dict[str, tuple[float, float]] = {}
         self._ema_ts: dict[str, float] = {}
+        self._outlier_count: dict[str, int] = {}
 
     def _zone_for_point(self, x: float, y: float) -> str:
         for z in self._zones:
@@ -138,7 +144,23 @@ class PlanFusionCoordinator:
         if prev is None or (ts - prev_ts) > self._cfg.ema_reset_gap_sec:
             self._ema[track_id] = (x, y)
             self._ema_ts[track_id] = ts
+            self._outlier_count[track_id] = 0
             return x, y
+
+        dt = max(ts - prev_ts, 1e-3)
+        dist = _hypot(x - prev[0], y - prev[1])
+        speed = dist / dt
+
+        if self._cfg.max_speed_pxps > 0 and speed > self._cfg.max_speed_pxps:
+            # Outlier — reject this measurement, keep the previous smoothed value.
+            cnt = self._outlier_count.get(track_id, 0) + 1
+            self._outlier_count[track_id] = cnt
+            if cnt < self._cfg.outlier_release_after:
+                self._ema_ts[track_id] = ts  # advance time so we don't trigger reset_gap
+                return prev[0], prev[1]
+            # too many outliers in a row → trust the new measurement (teleport / track swap)
+
+        self._outlier_count[track_id] = 0
         a = self._cfg.ema_alpha
         nx = a * x + (1.0 - a) * prev[0]
         ny = a * y + (1.0 - a) * prev[1]

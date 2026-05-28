@@ -1,10 +1,10 @@
 # Multi-camera calibration web tool
 
-Browser-based homography calibration. Stand at a position, click it on
-the floor plan, click your feet in every camera tile that sees you.
-Shared world points pin all cameras to the same coordinate system —
-unlike [`tools/calibrate_homography.py`](../../tools/calibrate_homography.py),
-which fits each camera in isolation.
+Browser-based homography calibration on the **Maro floor plan** (plan pixels).
+Click shared **landmarks** on the plan and in each camera tile (door corners,
+lamps, or **LED strip markers**). **Line mode** places several landmarks along
+a corridor in one step. Hallway-specific steps:
+[`docs/calibration_hallway.md`](../../docs/calibration_hallway.md).
 
 ## Run
 

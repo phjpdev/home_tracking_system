@@ -34,9 +34,21 @@
       <div class="panel-header">
         <h2>Maro floor plan</h2>
         <div class="position-controls">
+          <span class="pill">Mode:
+            <label><input type="radio" name="mode" value="point" checked> Point</label>
+            <label><input type="radio" name="mode" value="line"> Line</label>
+          </span>
+          <span class="pill" id="line-n-wrap" hidden>
+            Points/line:
+            <input id="line-n" type="number" min="2" max="20" value="3" style="width: 3em">
+          </span>
+          <span class="pill">
+            <label><input id="led-toggle" type="checkbox"> LED markers</label>
+          </span>
           <span class="pill">Landmark: <strong id="sel-name">none</strong></span>
           <button id="btn-add-position" type="button">+ Add landmark (click plan)</button>
           <button id="btn-delete-position" type="button" class="danger">Delete</button>
+          <button id="btn-clear-all" type="button" class="danger">Clear all</button>
         </div>
       </div>
       <div id="floor-wrap" class="floor-wrap">

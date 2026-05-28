@@ -179,7 +179,7 @@ Confirmed at the 2026-05-21 install:
 |-------------|----|-----------|--------|
 | `cam_yoga_ne`  | .71 | `180` | mount hangs upside-down |
 | `cam_yoga_se`  | .70 | `180` | mount hangs upside-down |
-| `cam_hallway_n`| .74 | `180` | mount hangs upside-down |
+| `cam_hallway_n`| .74 | `90` | sideways mount along corridor — see [`calibration_hallway.md`](calibration_hallway.md) |
 | (others)       |     | `0`   | normal |
 
 Diagnostic workflow when a new camera arrives or someone re-mounts an
@@ -250,6 +250,10 @@ Short handover: [`calibration_day_handover.md`](calibration_day_handover.md).
 
 6. **Acceptance:** walk each zone; live Maro dot within **~10 px**. If multiple offset dots,
    confirm `poster.fused_mode: true` in `config.multi_camera.yaml`.
+
+**Hallway (`cam_hallway_n`):** `rotate: 90`, run
+[`tools/calibrate_camera_intrinsics.py`](../tools/calibrate_camera_intrinsics.py) first,
+then calibrate with **LED + Line** mode — see [`calibration_hallway.md`](calibration_hallway.md).
 
 Off-site with stills:
 

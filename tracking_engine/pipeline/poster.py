@@ -3,28 +3,82 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 from typing import Any
 
 import requests
 
+logger = logging.getLogger(__name__)
+
+# Maro's /tracking/positions endpoint assumes the OLD tracker space
+# (0..19800 mm × 0..10200 mm, origin top-left) and rescales it into the
+# Maro plan-pixel space internally. The new floor-plan-pixel calibration
+# emits plan-px (0..2700 × 0..1324). To survive the legacy rescale we
+# pre-multiply by (19800/2700) ≈ 7.333 and (10200/1324) ≈ 7.704 so Maro's
+# SCALE+OFFSET produces the right floor-plan position.
+_LEGACY_W_MM = 19800.0
+_LEGACY_H_MM = 10200.0
+
 
 class PositionPoster:
-    def __init__(self, url: str, timeout: float, dry_run: bool, verify_tls: bool = True):
+    def __init__(
+        self,
+        url: str,
+        timeout: float,
+        dry_run: bool,
+        verify_tls: bool = True,
+        plan_w_px: int | None = None,
+        plan_h_px: int | None = None,
+    ):
         self.url = url
         self.timeout = timeout
         self.dry_run = dry_run
         self._session = requests.Session()
         self._session.headers.update({"Content-Type": "application/json"})
         self._verify = verify_tls
+        self.plan_w_px = float(plan_w_px) if plan_w_px else None
+        self.plan_h_px = float(plan_h_px) if plan_h_px else None
+        self._debug = os.environ.get("TRACKER_POSTER_DEBUG", "").lower() in ("1", "true", "yes")
+        if self.plan_w_px and self.plan_h_px:
+            self._sx = _LEGACY_W_MM / self.plan_w_px
+            self._sy = _LEGACY_H_MM / self.plan_h_px
+            logger.info(
+                "poster: plan_px → legacy-mm rescale active (sx=%.3f, sy=%.3f)",
+                self._sx, self._sy,
+            )
+        else:
+            self._sx = self._sy = None
+
+    def _rescale_persons(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Convert plan-px coords to the legacy-mm scale Maro's endpoint expects."""
+        if self._sx is None or self._sy is None:
+            return payload
+        persons = payload.get("persons") or []
+        if not persons:
+            return payload
+        new_persons = []
+        for p in persons:
+            q = dict(p)
+            try:
+                q["x"] = float(p.get("x", 0)) * self._sx
+                q["y"] = float(p.get("y", 0)) * self._sy
+            except (TypeError, ValueError):
+                pass
+            new_persons.append(q)
+        return {**payload, "persons": new_persons}
 
     def post(self, payload: dict[str, Any]) -> tuple[bool, str]:
+        outgoing = self._rescale_persons(payload)
+        if self._debug:
+            print(f"[poster→] {self.url}  {json.dumps(outgoing)[:240]}")
         if self.dry_run:
-            return True, json.dumps(payload)
+            return True, json.dumps(outgoing)
 
         try:
             r = self._session.post(
                 self.url,
-                data=json.dumps(payload),
+                data=json.dumps(outgoing),
                 timeout=self.timeout,
                 verify=self._verify,
             )

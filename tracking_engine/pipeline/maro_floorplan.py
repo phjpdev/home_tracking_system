@@ -65,13 +65,14 @@ class MaroFloorplanAssets:
     source: str = "api"
 
     def mm_to_plan_px(self, x_mm: float, y_mm: float) -> tuple[float, float]:
+        # Maro's render_floorplan_png.py applies ax.invert_yaxis(); the PNG already
+        # has min_y at the top. No extra flip here.
         b = self.bounds_mm
         w, h = self.plan_width, self.plan_height
         span_x = max(b.x_max - b.x_min, 1e-6)
         span_y = max(b.y_max - b.y_min, 1e-6)
         px_x = (x_mm - b.x_min) / span_x * w
-        nu = (y_mm - b.y_min) / span_y
-        px_y = (1.0 - nu) * h
+        px_y = (y_mm - b.y_min) / span_y * h
         return px_x, px_y
 
     def overlay_for_ui(self) -> dict[str, Any]:
@@ -92,9 +93,15 @@ class MaroFloorplanAssets:
             )
         spots_out: list[dict[str, Any]] = []
         for s in self.spots:
-            pos = s.get("position") or {}
-            x_mm = float(pos.get("x", s.get("x", 0)))
-            y_mm = float(pos.get("y", s.get("y", 0)))
+            pos = s.get("position")
+            if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                x_mm, y_mm = float(pos[0]), float(pos[1])
+            elif isinstance(pos, dict):
+                x_mm = float(pos.get("x", s.get("x", 0)))
+                y_mm = float(pos.get("y", s.get("y", 0)))
+            else:
+                x_mm = float(s.get("x", 0))
+                y_mm = float(s.get("y", 0))
             px_x, px_y = self.mm_to_plan_px(x_mm, y_mm)
             size_mm = float(s.get("size", 200))
             span_x = max(self.bounds_mm.x_max - self.bounds_mm.x_min, 1e-6)

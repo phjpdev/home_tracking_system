@@ -137,6 +137,11 @@ If multiple ghost dots appear, confirm `poster.fused_mode: true` (one fused POST
 | Yoga/hallway upside-down in UI only | Use `probe_rtsp` stills (pre-rotated); don’t double-rotate PNG overrides |
 | Residual always high on one cam | Re-pick landmarks; avoid colinear points; use lamp corners |
 
+## Hallway camera
+
+Narrow corridor + sideways mount + wide-angle lens: see
+[`calibration_hallway.md`](calibration_hallway.md) (undistort, LED, Line mode).
+
 ## Legacy tools
 
 - [`tools/calibrate_homography.py`](../tools/calibrate_homography.py) — single-camera mm (architect plan).

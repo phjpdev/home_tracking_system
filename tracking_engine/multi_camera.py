@@ -13,6 +13,7 @@ import cv2
 import yaml
 
 from .observability import configure_logging, metrics, start_metrics_server
+from .pipeline.camera_undistort import CameraUndistortRegistry
 from .pipeline.cameras_layout import load_cameras_layout, resolve_active_streams
 from .pipeline.detector import create_detector
 from .pipeline.homography import (
@@ -132,6 +133,10 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
         return 2
 
     calib_path = _resolve_path(cfg_dir, str(cfg.get("calibration_file", "calibration/camera_calibrations.json")))
+    intrinsics_path = _resolve_path(
+        cfg_dir, str(cfg.get("intrinsics_file", "calibration/camera_intrinsics.json"))
+    )
+    undistort = CameraUndistortRegistry.from_path(intrinsics_path)
     calibrations = []
     trackers: list[ByteTracker] = []
     sources: list[FrameSource] = []
@@ -163,11 +168,19 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     detector, det_cleanup = create_detector(cfg)
 
     pcfg = cfg.get("poster", {})
+    use_plan_px_post = False
+    plan_w_px = plan_h_px = None
+    if calibrations:
+        use_plan_px_post = calibrations[0].coordinate_space == COORD_MARO_PLAN_PX
+        if use_plan_px_post and calibrations[0].plan_size_px:
+            plan_w_px, plan_h_px = calibrations[0].plan_size_px
     poster = PositionPoster(
         url=str(pcfg.get("url", "http://127.0.0.1:8765/tracking/positions")),
         timeout=float(pcfg.get("timeout_sec", 3.0)),
         dry_run=bool(pcfg.get("dry_run", False)),
         verify_tls=bool(pcfg.get("verify_tls", True)),
+        plan_w_px=plan_w_px,
+        plan_h_px=plan_h_px,
     )
     include_lat = bool(pcfg.get("include_latency_in_post", False))
 
@@ -201,6 +214,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                 ema_alpha=float(fusion_cfg_raw.get("ema_alpha", 0.35)),
                 ema_reset_gap_sec=float(fusion_cfg_raw.get("ema_reset_gap_sec", 2.0)),
                 drop_outside_zones=bool(fusion_cfg_raw.get("drop_outside_zones", True)),
+                max_speed_pxps=float(fusion_cfg_raw.get("max_speed_pxps", 1500.0)),
+                outlier_release_after=int(fusion_cfg_raw.get("outlier_release_after", 5)),
             ),
             zones,
         )
@@ -303,6 +318,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                 ok, frame = source.read()
                 if ok and frame is not None and rotations[idx]:
                     frame = _apply_rotate(frame, rotations[idx])
+                if ok and frame is not None and undistort.has(cam_id):
+                    frame = undistort.apply(cam_id, frame)
                 sum_grab += (time.perf_counter() - t_grab) * 1000.0
 
                 if not ok or frame is None:

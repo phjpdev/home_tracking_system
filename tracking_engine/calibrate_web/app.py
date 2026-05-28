@@ -27,8 +27,10 @@ import yaml
 from ..pipeline.cameras_layout import load_cameras_layout, resolve_active_streams
 from .calibration_io import atomic_merge_calibrations, build_camera_entry, read_calibrations
 from .homography_fit import Position, fit_all
+from ..pipeline.camera_undistort import CameraUndistortRegistry
 from ..pipeline.maro_floorplan import COORDINATE_SPACE, load_maro_floorplan
 from .snapshot import CameraSnapshotPool
+from .led_marker import LedMarker
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,8 @@ def _load_runtime_config() -> dict[str, Any]:
     calib_path = _resolve(
         cfg_dir, str(cfg.get("calibration_file", "calibration/camera_calibrations.json"))
     )
+    intrinsics_rel = str(cfg.get("intrinsics_file") or "calibration/camera_intrinsics.json")
+    intrinsics_path = _resolve(cfg_dir, intrinsics_rel)
 
     maro_cfg = cfg.get("maro") or {}
     api_base = str(
@@ -104,6 +108,7 @@ def _load_runtime_config() -> dict[str, Any]:
         "layout": layout,
         "cameras": cameras,
         "calib_path": calib_path,
+        "intrinsics_path": intrinsics_path,
         "maro_api_base": api_base,
         "maro_cache_dir": cache_dir,
         "save_residual_px_max": save_residual_px_max,
@@ -116,14 +121,16 @@ app = FastAPI(title="Tracking System — Multi-Camera Calibration")
 _context: dict[str, Any] = {}
 _pool: Optional[CameraSnapshotPool] = None
 _maro_assets: Any = None
+_led: Optional[LedMarker] = None
 
 
 @app.on_event("startup")
 def _startup() -> None:
-    global _pool, _maro_assets
+    global _pool, _maro_assets, _led
     ctx = _load_runtime_config()
     _context.update(ctx)
-    _pool = CameraSnapshotPool(ctx["cameras"])
+    undistort = CameraUndistortRegistry.from_path(Path(ctx["intrinsics_path"]))
+    _pool = CameraSnapshotPool(ctx["cameras"], undistort=undistort)
     try:
         _maro_assets = load_maro_floorplan(
             ctx["maro_api_base"],
@@ -133,6 +140,18 @@ def _startup() -> None:
     except Exception as exc:
         logger.error("calibrate_web: failed to load Maro floor plan: %s", exc)
         raise
+    # LED marker — optional, only enabled if cache has artnet_mapping.json
+    try:
+        _led = LedMarker.from_cache(Path(ctx["maro_cache_dir"]))
+        if _led.strip_names():
+            logger.info("led_marker: %d strips ready (%s)",
+                        len(_led.strip_names()), ", ".join(_led.strip_names()))
+        else:
+            _led = None
+            logger.info("led_marker: no ARGB strips with mapping found — LED mode disabled")
+    except Exception as exc:
+        logger.warning("led_marker: failed to init (%s) — LED mode disabled", exc)
+        _led = None
     logger.info(
         "calibrate_web up: cameras=%d layout=%s calib=%s maro=%s (%dx%d)",
         len(ctx["cameras"]),
@@ -146,7 +165,12 @@ def _startup() -> None:
 
 @app.on_event("shutdown")
 def _shutdown() -> None:
-    global _pool
+    global _pool, _led
+    if _led is not None:
+        try:
+            _led.all_off()
+        except Exception as exc:
+            logger.warning("led_marker: shutdown all_off failed: %s", exc)
     if _pool is not None:
         _pool.release_all()
         _pool = None
@@ -254,6 +278,101 @@ def api_snapshot(cam_name: str, ts: Optional[float] = Query(default=None)) -> Re
         raise HTTPException(status_code=503, detail=f"no frame yet for {cam_name!r}")
     headers = {"Cache-Control": "no-store"}
     return Response(content=jpeg, media_type="image/jpeg", headers=headers)
+
+
+@app.get("/api/led/strips")
+def api_led_strips() -> JSONResponse:
+    """List ARGB strips available for marker calibration + their geometry."""
+    if _led is None:
+        return JSONResponse({"available": False, "strips": []})
+    assets = _context.get("maro_assets")
+    out = []
+    for name in _led.strip_names():
+        info = _led.info(name)
+        if not info:
+            continue
+        # Pre-compute plan_px positions for every marker so the UI can show them all
+        markers_px = []
+        for idx in range(info["num_markers"]):
+            mm = _led.marker_position_mm(name, idx)
+            if mm is None or assets is None:
+                continue
+            px = assets.mm_to_plan_px(mm[0], mm[1])
+            markers_px.append({
+                "idx": idx,
+                "mm": [round(mm[0], 1), round(mm[1], 1)],
+                "plan_px": [round(px[0], 1), round(px[1], 1)],
+            })
+        out.append({**info, "markers": markers_px})
+    return JSONResponse({"available": True, "strips": out})
+
+
+@app.post("/api/led/marker")
+def api_led_marker(payload: dict[str, Any]) -> JSONResponse:
+    """Light a single marker (one logical pixel = 6 LEDs) on the selected strip.
+    Body: {strip, idx, rgbw?=[r,g,b,w] (0-255)}"""
+    if _led is None:
+        raise HTTPException(status_code=503, detail="LED marker mode unavailable (no mapping)")
+    strip = str(payload.get("strip", "")).strip()
+    idx = int(payload.get("idx", 0))
+    raw = payload.get("rgbw") or [0, 0, 0, 255]
+    rgbw = tuple(max(0, min(255, int(v))) for v in raw[:4])
+    while len(rgbw) < 4:
+        rgbw = (*rgbw, 0)
+    result = _led.light_marker(strip, idx, rgbw)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "light failed"))
+    mm = _led.marker_position_mm(strip, idx)
+    assets = _context.get("maro_assets")
+    plan_px = assets.mm_to_plan_px(mm[0], mm[1]) if (mm and assets) else None
+    return JSONResponse({
+        **result,
+        "mm": [round(mm[0], 1), round(mm[1], 1)] if mm else None,
+        "plan_px": [round(plan_px[0], 1), round(plan_px[1], 1)] if plan_px else None,
+    })
+
+
+@app.post("/api/led/off")
+def api_led_off(payload: dict[str, Any] = None) -> JSONResponse:
+    """Turn off LEDs. Body: {strip?} (omit to clear all strips)."""
+    if _led is None:
+        return JSONResponse({"ok": True, "cleared": []})
+    strip = (payload or {}).get("strip")
+    return JSONResponse(_led.all_off(strip))
+
+
+@app.post("/api/led/all_markers")
+def api_led_all_markers(payload: dict[str, Any] = None) -> JSONResponse:
+    """Light a block pattern on all strips simultaneously.
+    Body: {rgbw?, on_markers?=5, off_markers?=5}
+    Default = 50 cm lit / 50 cm dark (1 marker = 10 cm = 6 LEDs)."""
+    if _led is None:
+        raise HTTPException(status_code=503, detail="LED unavailable")
+    body = payload or {}
+    raw = body.get("rgbw") or [255, 255, 255, 255]
+    rgbw = tuple(max(0, min(255, int(v))) for v in raw[:4])
+    while len(rgbw) < 4:
+        rgbw = (*rgbw, 0)
+    on_n = int(body.get("on_markers", 5))
+    off_n = int(body.get("off_markers", 5))
+    result = _led.light_blocks(on_markers=on_n, off_markers=off_n, rgbw=rgbw)
+    # Augment with plan-pixel positions
+    assets = _context.get("maro_assets")
+    lit_with_px: dict[str, list[dict[str, Any]]] = {}
+    for name, indices in result.get("lit_per_strip", {}).items():
+        positions = []
+        for idx in indices:
+            mm = _led.marker_position_mm(name, idx)
+            if mm is None or assets is None:
+                continue
+            px = assets.mm_to_plan_px(mm[0], mm[1])
+            positions.append({
+                "idx": idx,
+                "plan_px": [round(px[0], 1), round(px[1], 1)],
+            })
+        lit_with_px[name] = positions
+    result["lit_with_px"] = lit_with_px
+    return JSONResponse(result)
 
 
 def _parse_positions(payload: dict[str, Any]) -> list[Position]:

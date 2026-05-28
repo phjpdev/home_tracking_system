@@ -24,7 +24,8 @@ multi_camera:
   # ``tools/probe_rtsp.py``. Use it when a camera is mounted upside-down or on
   # its side and the OEM firmware doesn't compensate. Default is 0.
   # Confirmed flipped on 2026-05-21 from probe stills:
-  #   cam_yoga_ne (.71), cam_yoga_se (.70), cam_hallway_n (.74) -> rotate: 180
+  #   cam_yoga_ne (.71), cam_yoga_se (.70) -> rotate: 180
+  #   cam_hallway_n (.74) -> rotate: 90 (sideways mount, 2026-05 client reinstall)
   streams:
     - name: cam_kwz_sw
       rtsp_url: "rtsp://192.168.178.75:554/user=admin&password=admin123&channel=1&stream=1.sdp"
@@ -49,9 +50,10 @@ multi_camera:
     - name: cam_hallway_n
       rtsp_url: "rtsp://192.168.178.74:554/user=admin&password=admin123&channel=1&stream=1.sdp"
       enabled: true
-      rotate: 180   # mounted upside-down; physical re-mount also acceptable
+      rotate: 90    # sideways mount along corridor; use probe_rtsp stills after any change
 
 calibration_file: calibration/camera_calibrations.json
+intrinsics_file: calibration/camera_intrinsics.json
 
 # Maro floor-plan (plan-pixel calibration + zone boundaries for fusion).
 maro:
@@ -74,10 +76,12 @@ tracking:
   default_privacy: false
   plan_fusion:
     enabled: true
-    cluster_distance_px: 80.0
-    ema_alpha: 0.35
-    ema_reset_gap_sec: 2.0
-    drop_outside_zones: true
+    cluster_distance_px: 120.0
+    ema_alpha: 0.5
+    ema_reset_gap_sec: 1.0
+    drop_outside_zones: false   # until Maro adds Hallway/Flur zone polygon
+    max_speed_pxps: 1500.0
+    outlier_release_after: 5
 
 poster:
   # Live Maro tracking service on the LAN. Confirmed reachable from the Pi

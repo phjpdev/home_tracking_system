@@ -22,6 +22,7 @@ from typing import Any, Optional
 import cv2
 import numpy as np
 
+from ..pipeline.camera_undistort import CameraUndistortRegistry
 from ..pipeline.ingest import LatestRtspSource, open_video
 
 
@@ -45,8 +46,13 @@ def _apply_rotate(frame: Optional[np.ndarray], deg: int) -> Optional[np.ndarray]
 class _CameraSlot:
     """One camera: thread-managed source + cached oriented frame + last size."""
 
-    def __init__(self, cam: dict[str, Any]):
+    def __init__(
+        self,
+        cam: dict[str, Any],
+        undistort: Optional[CameraUndistortRegistry] = None,
+    ):
         self.name: str = str(cam["name"])
+        self._undistort = undistort
         self.rotate: int = int(cam.get("rotate") or 0)
         if self.rotate not in _ALLOWED_ROTATIONS:
             self.rotate = 0
@@ -113,6 +119,8 @@ class _CameraSlot:
         oriented = frame if skip_rotate else _apply_rotate(frame, self.rotate)
         if oriented is None:
             return {"ok": False, "error": "rotate failed"}
+        if self._undistort is not None and self._undistort.has(self.name):
+            oriented = self._undistort.apply(self.name, oriented)
         h, w = oriented.shape[:2]
         with self._lock:
             self._oriented = oriented
@@ -150,10 +158,14 @@ class CameraSnapshotPool:
     frame should call :meth:`refresh_all` first.
     """
 
-    def __init__(self, cameras: list[dict[str, Any]]):
+    def __init__(
+        self,
+        cameras: list[dict[str, Any]],
+        undistort: Optional[CameraUndistortRegistry] = None,
+    ):
         self._slots: dict[str, _CameraSlot] = {}
         for cam in cameras:
-            self._slots[str(cam["name"])] = _CameraSlot(cam)
+            self._slots[str(cam["name"])] = _CameraSlot(cam, undistort=undistort)
 
     def names(self) -> list[str]:
         return list(self._slots.keys())
