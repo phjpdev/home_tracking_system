@@ -7,6 +7,9 @@ lens undistortion.
 
 See also: [`calibration_maro_plan_px.md`](calibration_maro_plan_px.md) (general Maro plan-pixel flow).
 
+**Client-facing step-by-step:** [`hallway_calibration_client_guide.md`](hallway_calibration_client_guide.md)
+— a self-contained walkthrough (lights on, capture still, fix distortion on a Mac, deploy, lights off).
+
 ## Prerequisites
 
 - Maro API up and `maro_cache` populated (real `floorplan_bg.png`, `strips.json`).
