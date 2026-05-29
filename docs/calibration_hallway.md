@@ -26,11 +26,21 @@ python tools/probe_rtsp.py --camera cam_hallway_n --save-stills /tmp/stills_hall
 
 Copy `cam_hallway_n.png` into `stills/` if calibrating from a laptop.
 
-## Step 2 — Lens undistortion (recommended)
+## Step 2 — Lens undistortion (recommended, optional)
 
-**Does not need Maro** — only the hallway camera RTSP (192.168.178.74) and a **printed chessboard**.
+This step is a **quality upgrade, not a requirement**. The hallway is calibrated
+with the **same LED + Line homography** as K/WZ and Yoga (Step 3). Because the
+hallway lens is heavily wide-angle and the camera is mounted sideways, a single
+homography fits poorly across the long corridor — a person walking "sweeps"
+in/out along the axis. Removing lens distortion first straightens the floor so
+the homography lands accurately end-to-end. **Does not need Maro.**
 
-Wide-angle distortion bends floor lines and breaks homography. Calibrate once:
+You have two ways to get the distortion coefficients; both write the same
+`cam_hallway_n` entry into `camera_intrinsics.json`.
+
+### Option A — Chessboard (classic)
+
+Needs a **printed chessboard** and the live RTSP stream.
 
 1. Print a chessboard (default inner corners **9×6**, 25 mm squares — count **inner** corners, not squares).
 2. Verify the camera first:
@@ -53,11 +63,29 @@ cd /opt/tracking-system
 If you get `got 0 chessboard detections`: no checkerboard was seen (wrong pattern size, board too small/far, or RTSP not delivering frames). Check `/tmp/hallway_debug/last_frame_no_chessboard.jpg`.
 
 4. Confirm `tracking_engine/calibration/camera_intrinsics.json` contains `cam_hallway_n`
-   with `K`, `dist`, and `image_size` `[704, 576]`.
+   with `K`, `dist`, and `image_size` matching the rotated frame.
 5. Restart `tracking-calibrate-web` and `tracking-engine` so undistort maps reload.
 
-**Acceptance:** Side-by-side before/after on a still — tile grout lines near the image edges
-should be straight.
+### Option B — Line-based (no chessboard, uses the tiles)
+
+When a chessboard is impractical, use features that are physically straight —
+floor **tile grout lines** (a 2D grid is ideal), the **LED strip**, and a
+**wall base**. A small GUI lets you click points along each line on a lit still
+and solves for the distortion that makes them straight again (plumb-line
+method). Run on a machine with a display (e.g. a Mac) using the rotated still
+from `probe_rtsp.py`:
+
+```bash
+python tools/calibrate_distortion_lines.py \
+  --image stills/cam_hallway_n.png --camera cam_hallway_n
+```
+
+Click >=3 points per line, `n` for next line, add several lines in both
+directions, then `c` to compute and `s` in the preview to save. Aim for the
+"line-straightness RMS" to drop to ~1px or less.
+
+**Acceptance (either option):** Side-by-side before/after on a still — tile grout
+lines near the image edges should be straight.
 
 ## Step 3 — Calibrate homography (LED + Line mode)
 
