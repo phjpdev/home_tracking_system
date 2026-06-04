@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -31,6 +32,7 @@ from ..pipeline.camera_undistort import CameraUndistortRegistry
 from ..pipeline.maro_floorplan import COORDINATE_SPACE, load_maro_floorplan
 from .snapshot import CameraSnapshotPool
 from .led_marker import LedMarker
+from ..calibration.auto_led import LedAutoCalConfig, LedAutoCalibrator
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +124,12 @@ _context: dict[str, Any] = {}
 _pool: Optional[CameraSnapshotPool] = None
 _maro_assets: Any = None
 _led: Optional[LedMarker] = None
+_auto_cal_lock = threading.Lock()
+_auto_cal_state: dict[str, Any] = {
+    "running": False,
+    "results": {},
+    "error": None,
+}
 
 
 @app.on_event("startup")
@@ -373,6 +381,118 @@ def api_led_all_markers(payload: dict[str, Any] = None) -> JSONResponse:
         lit_with_px[name] = positions
     result["lit_with_px"] = lit_with_px
     return JSONResponse(result)
+
+
+def _run_led_auto_cal(camera_names: list[str]) -> None:
+    global _auto_cal_state
+    ctx = _context
+    cfg = ctx.get("cfg") or {}
+    auto_raw = cfg.get("auto_calibration") or {}
+    led_raw = auto_raw.get("led") or {}
+    acfg = LedAutoCalConfig(
+        marker_step=int(led_raw.get("marker_step", 5)),
+        settle_ms=int(led_raw.get("settle_ms", 400)),
+        min_markers=int(led_raw.get("min_markers", 6)),
+        save_residual_px_max=float(led_raw.get("save_residual_px_max", 8.0)),
+    )
+    results: dict[str, Any] = {}
+    try:
+        if _led is None or _pool is None:
+            raise RuntimeError("LED strips or camera pool not available")
+
+        def grab(cam_id: str):
+            return _pool.get_latest_oriented(cam_id)
+
+        calibrator = LedAutoCalibrator(
+            led=_led,
+            floorplan=_maro_assets,
+            cfg=acfg,
+            grab_frame=grab,
+        )
+        new_entries: dict[str, dict[str, Any]] = {}
+        for cam_id in camera_names:
+            if cam_id not in _pool.names():
+                results[cam_id] = {"ok": False, "error": "unknown camera"}
+                continue
+            _pool.refresh_all(settle_seconds=0.3)
+            res = calibrator.calibrate_camera(cam_id)
+            if not res.ok or res.fit is None:
+                results[cam_id] = {
+                    "ok": False,
+                    "error": res.error,
+                    "num_markers": res.num_markers,
+                }
+                continue
+            frame = grab(cam_id)
+            if frame is None:
+                results[cam_id] = {"ok": False, "error": "no frame"}
+                continue
+            h, w = frame.shape[:2]
+            new_entries[cam_id] = calibrator.build_calibration_entry(
+                res, img_w=w, img_h=h
+            )
+            results[cam_id] = {
+                "ok": True,
+                "num_markers": res.num_markers,
+                "residual_px_mean": res.residual_px_mean,
+                "residual_px_max": res.residual_px_max,
+            }
+        if new_entries:
+            assets = _maro_assets
+            atomic_merge_calibrations(
+                Path(ctx["calib_path"]),
+                new_entries,
+                document_meta={
+                    "_coordinate_space": COORDINATE_SPACE,
+                    "_plan_size_px": [
+                        int(assets.plan_width),
+                        int(assets.plan_height),
+                    ],
+                },
+            )
+    except Exception as exc:
+        logger.exception("led auto-cal failed")
+        with _auto_cal_lock:
+            _auto_cal_state["error"] = str(exc)
+    finally:
+        with _auto_cal_lock:
+            _auto_cal_state["running"] = False
+            _auto_cal_state["results"] = results
+
+
+@app.post("/api/auto-cal/led/start")
+def api_auto_cal_led_start(payload: dict[str, Any] = None) -> JSONResponse:
+    """Run LED sequence auto-calibration (background thread)."""
+
+    if _led is None:
+        raise HTTPException(status_code=503, detail="LED not configured")
+    with _auto_cal_lock:
+        if _auto_cal_state.get("running"):
+            raise HTTPException(status_code=409, detail="auto-cal already running")
+        _auto_cal_state["running"] = True
+        _auto_cal_state["results"] = {}
+        _auto_cal_state["error"] = None
+    body = payload or {}
+    raw_names = body.get("cameras")
+    if raw_names:
+        names = [str(n) for n in raw_names]
+    else:
+        names = list(_pool.names()) if _pool else []
+    if not names:
+        raise HTTPException(status_code=400, detail="no cameras to calibrate")
+    threading.Thread(
+        target=_run_led_auto_cal,
+        args=(names,),
+        name="led-auto-cal",
+        daemon=True,
+    ).start()
+    return JSONResponse({"ok": True, "cameras": names})
+
+
+@app.get("/api/auto-cal/led/status")
+def api_auto_cal_led_status() -> JSONResponse:
+    with _auto_cal_lock:
+        return JSONResponse(dict(_auto_cal_state))
 
 
 def _parse_positions(payload: dict[str, Any]) -> list[Position]:

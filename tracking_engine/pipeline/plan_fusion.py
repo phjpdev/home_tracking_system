@@ -51,6 +51,7 @@ class PlanFusionConfig:
     ema_alpha: float = 0.35
     ema_reset_gap_sec: float = 2.0
     drop_outside_zones: bool = True
+    prefer_stereo: bool = True
     # Velocity outlier gate — reject single-frame jumps above this speed.
     # plan is ~6.4 mm/px, so 800 px/s ≈ 5 m/s (running). 1500 px/s ≈ 9.6 m/s (sprint).
     max_speed_pxps: float = 1500.0
@@ -114,8 +115,16 @@ class PlanFusionCoordinator:
 
         fused: list[dict[str, Any]] = []
         for key, group in groups.items():
-            xs = [float(r["x"]) for r in group]
-            ys = [float(r["y"]) for r in group]
+            stereo_rows = [
+                r for r in group
+                if str(r.get("position_source")) == "stereo"
+            ]
+            if self._cfg.prefer_stereo and stereo_rows:
+                use_group = stereo_rows
+            else:
+                use_group = group
+            xs = [float(r["x"]) for r in use_group]
+            ys = [float(r["y"]) for r in use_group]
             x_med = _median(xs)
             y_med = _median(ys)
             sources = sorted({str(r["cam_id"]) for r in group})
@@ -123,8 +132,16 @@ class PlanFusionCoordinator:
             track_id = str(gid) if gid else key
             x_sm, y_sm = self._smooth(track_id, x_med, y_med, ts)
             zone = self._zone_for_point(x_sm, y_sm)
+            if zone == "unknown":
+                for r in group:
+                    z = r.get("zone")
+                    if z and str(z) != "unknown":
+                        zone = str(z)
+                        break
             if self._cfg.drop_outside_zones and zone == "unknown" and self._zones:
                 continue
+            pos_src = "stereo" if stereo_rows and self._cfg.prefer_stereo else "fused"
+            cal_conf = "high" if stereo_rows else "low"
             person: dict[str, Any] = {
                 "id": str(group[0].get("id", "t0")),
                 "x": int(round(x_sm)),
@@ -132,6 +149,8 @@ class PlanFusionCoordinator:
                 "zone": zone,
                 "privacy": bool(group[0].get("privacy", False)),
                 "sources": sources,
+                "position_source": pos_src,
+                "cal_confidence": cal_conf,
             }
             if gid:
                 person["global_id"] = gid

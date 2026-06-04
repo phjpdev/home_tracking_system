@@ -23,6 +23,7 @@ from .pipeline.homography import (
     load_calibration,
 )
 from .pipeline.plan_fusion import PlanFusionConfig, PlanFusionCoordinator, zones_from_overlay
+from .pipeline.stereo_foot import StereoFootConfig, StereoFootCoordinator
 from .pipeline.ingest import FrameSource, open_rtsp, open_rtsp_latest, open_video
 from .pipeline.latency import LatencyMonitor
 from .pipeline.poster import PositionPoster
@@ -216,9 +217,35 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                 drop_outside_zones=bool(fusion_cfg_raw.get("drop_outside_zones", True)),
                 max_speed_pxps=float(fusion_cfg_raw.get("max_speed_pxps", 1500.0)),
                 outlier_release_after=int(fusion_cfg_raw.get("outlier_release_after", 5)),
+                prefer_stereo=bool(fusion_cfg_raw.get("prefer_stereo", True)),
             ),
             zones,
         )
+    stereo_cfg_raw = cfg.get("stereo") or {}
+    stereo_enabled = bool(stereo_cfg_raw.get("enabled", False))
+    stereo_foot: Optional[StereoFootCoordinator] = None
+    if stereo_enabled:
+        pairs_raw = stereo_cfg_raw.get("pairs") or []
+        pairs: list[tuple[str, str]] = []
+        for item in pairs_raw:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                pairs.append((str(item[0]), str(item[1])))
+        if pairs:
+            stereo_foot = StereoFootCoordinator(
+                StereoFootConfig(
+                    pairs=pairs,
+                    max_match_plan_px=float(
+                        stereo_cfg_raw.get("max_match_plan_px", 150.0)
+                    ),
+                    max_reproj_error_px=float(
+                        stereo_cfg_raw.get("max_reproj_error_px", 12.0)
+                    ),
+                )
+            )
+            print(
+                f"[multi] stereo foot fusion: {len(pairs)} pair(s)",
+                file=sys.stderr,
+            )
     fused_post = bool((cfg.get("poster") or {}).get("fused_mode", fusion_enabled))
 
     rcfg = cfg.get("runtime", {})
@@ -369,6 +396,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                             "y": int(round(px_y)),
                             "zone": zone,
                             "privacy": default_privacy,
+                            "position_source": "single_cam",
+                            "cal_confidence": "high",
                         }
                         if reid is not None:
                             rex = reid.observe(
@@ -390,6 +419,13 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                                     "y": person_row["y"],
                                     "privacy": person_row["privacy"],
                                     "global_id": person_row.get("global_id"),
+                                    "position_source": person_row.get(
+                                        "position_source", "single_cam"
+                                    ),
+                                    "cal_confidence": person_row.get(
+                                        "cal_confidence", "high"
+                                    ),
+                                    "zone": zone,
                                 }
                             )
                     sum_geom += (time.perf_counter() - t_geom0) * 1000.0
@@ -445,6 +481,9 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
             if video_eof_stop:
                 break
+
+            if stereo_foot is not None and fusion_rows:
+                fusion_rows = stereo_foot.merge_fusion_rows(fusion_rows)
 
             if fused_post and plan_fusion is not None:
                 fused_persons = plan_fusion.fuse_tick(fusion_rows, ts)

@@ -840,6 +840,33 @@ async function ledTurnOff() {
   } catch (_) {}
 }
 
+async function runLedAutoCal() {
+  const btn = $("#btn-led-auto-cal");
+  btn.disabled = true;
+  try {
+    await api("POST", "/api/auto-cal/led/start", {});
+    toast("LED auto-cal started (dim room, wait ~2–5 min)", "");
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const st = await api("GET", "/api/auto-cal/led/status");
+      if (!st.running) {
+        if (st.error) {
+          toast("Auto-cal error: " + st.error, "bad");
+        } else {
+          const ok = Object.values(st.results || {}).filter((r) => r.ok).length;
+          const total = Object.keys(st.results || {}).length;
+          toast(`LED auto-cal done: ${ok}/${total} cameras OK`, ok === total ? "good" : "bad");
+        }
+        break;
+      }
+    }
+    await doRecapture();
+    await doCompute();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function attachEvents() {
   $("#floor-canvas").addEventListener("click", floorCanvasClick);
   $("#floor-canvas").addEventListener("mousemove", (ev) => {
@@ -852,6 +879,7 @@ function attachEvents() {
   $("#btn-compute").addEventListener("click", () => doCompute().catch((e) => toast(e.message, "bad")));
   $("#btn-save").addEventListener("click", doSave);
   $("#btn-download").addEventListener("click", downloadSession);
+  $("#btn-led-auto-cal").addEventListener("click", () => runLedAutoCal().catch((e) => toast(e.message, "bad")));
   $("#btn-add-position").addEventListener("click", () =>
     toast("Click a landmark on the Maro plan.", "")
   );

@@ -71,11 +71,34 @@ detector:
   hailo_hef: /usr/share/hailo-models/yolov8s_h8l.hef
   conf: 0.4
 
+# One-shot LED map calibration (tools/calibrate_led_sequence.py).
+auto_calibration:
+  enabled: true
+  led:
+    marker_step: 5
+    settle_ms: 400
+    min_markers: 6
+    save_residual_px_max: 8.0
+  # Optional paths; default = maro.assets_cache_dir/strips.json + artnet_mapping.json
+  # artnet_mapping can be copied from maro-light-tools/meter_test/config/artnet_mapping.json
+  strips_path: null
+  artnet_mapping_path: null
+
+# Stereo foot fusion (overlap zones). Re-enable plan_fusion when stereo.enabled is true.
+stereo:
+  enabled: true
+  pairs:
+    - [cam_yoga_ne, cam_yoga_se]
+  max_match_plan_px: 150.0
+  max_reproj_error_px: 12.0
+
 tracking:
   zone: unknown
   default_privacy: false
   plan_fusion:
+    # Median fusion across misaligned homographies hurts stability; use stereo path first.
     enabled: true
+    prefer_stereo: true
     cluster_distance_px: 120.0
     ema_alpha: 0.5
     ema_reset_gap_sec: 1.0
