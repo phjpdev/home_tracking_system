@@ -203,7 +203,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
         try:
             from .pipeline.maro_floorplan import load_maro_floorplan
 
-            api_base = str(maro_cfg.get("api_base") or "http://192.168.178.25:8420")
+            api_base = str(maro_cfg.get("api_base") or "http://127.0.0.1:8420")
             assets = load_maro_floorplan(api_base, cache_dir)
             zones = zones_from_overlay(assets.overlay_for_ui())
         except Exception as exc:

@@ -17,7 +17,7 @@ Maro must draw dots at these coordinates on `floorplan_bg.png` without extra con
 
 ## Prerequisites
 
-- Maro running on the LAN (`http://192.168.178.25:8420` or your Pi IP).
+- Maro running on the Pi (`http://127.0.0.1:8420` for services; UI at `http://<pi-lan-ip>:8420/`).
 - `fastapi`, `uvicorn`, `requests` installed (`tracking_engine/requirements.txt`).
 - Seven camera stills or live RTSP from `config.multi_camera.yaml`.
 
@@ -84,7 +84,7 @@ Open `http://localhost:8090`.
 
 ```powershell
 python -m tracking_engine.calibrate_web `
-  --maro-api http://192.168.178.25:8420 `
+  --maro-api http://127.0.0.1:8420 `
   --video cam_kwz_sw=stills/cam_kwz_sw.png `
   ... (all seven cameras)
 ```
@@ -106,7 +106,7 @@ Ensure [`config.multi_camera.yaml`](../tracking_engine/config.multi_camera.yaml)
 
 ```yaml
 maro:
-  api_base: http://192.168.178.25:8420
+  api_base: http://127.0.0.1:8420
 calibration:
   coordinate_space: maro_floorplan_px
 tracking:

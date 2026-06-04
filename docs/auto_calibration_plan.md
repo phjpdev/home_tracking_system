@@ -340,6 +340,16 @@ Optional: `--dry-run` (no Art-Net / no file write), `--refine-tiles --tile-mm 60
 1. Open `calibrate_web` → click **LED auto-cal** (runs in background ~2–5 min).
 2. Poll completes → recapture + recompute shown in UI.
 
+### Deploy on Pi (git pull — do not edit `/opt` only)
+
+```bash
+cd ~/home_tracking_system && git pull
+sudo bash deploy/scripts/install.sh
+sudo systemctl restart tracking-engine tracking-calibrate-web
+```
+
+Maro must be running separately: `cd ~/maro-clean && .venv/bin/uvicorn src.maro.web.app:app --host 0.0.0.0 --port 8420`
+
 ### Restart tracking
 
 ```bash

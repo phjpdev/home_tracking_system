@@ -9,7 +9,7 @@ camera) while calibrating.
 The Art-Net packet format matches ``dmx_test/dmx_test_gui.py`` (ArtDMX opcode
 0x5000, ODE MK3 at 192.168.178.11:6454). No third-party packages required.
 
-Because the Maro server (192.168.178.25:8420) also drives these controllers
+Because the Maro server (127.0.0.1:8420 on the Pi) also drives these controllers
 ("last packet on the wire wins"), this tool can pause Maro's Art-Net output
 while the lights are held and re-enable it on exit.
 
@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import struct
 import sys
@@ -52,7 +53,7 @@ CHANNELS_PER_UNIVERSE = 512
 # ODE universe 0 or 1, so those two universes cover all spotlights/dimmers.
 SPOT_UNIVERSES = (0, 1)
 
-MARO_BASE = "http://192.168.178.25:8420"
+MARO_BASE = os.environ.get("MARO_API_BASE", "http://127.0.0.1:8420").rstrip("/")
 MARO_ARTNET_TOGGLE = "/api/artnet/enabled"
 
 _sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

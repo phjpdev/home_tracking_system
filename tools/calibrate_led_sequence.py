@@ -167,7 +167,7 @@ def main() -> int:
 
     maro_cfg = cfg.get("maro") or {}
     cache_dir = _resolve(cfg_dir, str(maro_cfg.get("assets_cache_dir", "calibration/maro_cache")))
-    api_base = str(maro_cfg.get("api_base") or "http://192.168.178.25:8420")
+    api_base = str(maro_cfg.get("api_base") or "http://127.0.0.1:8420")
     calib_path = _resolve(cfg_dir, str(cfg.get("calibration_file", "calibration/camera_calibrations.json")))
     intrinsics_path = _resolve(
         cfg_dir, str(cfg.get("intrinsics_file", "calibration/camera_intrinsics.json"))

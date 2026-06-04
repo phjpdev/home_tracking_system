@@ -80,7 +80,7 @@ last packet on the wire wins. While testing, either:
 - Stop the Maro server, **or**
 - Pause Maro's Art-Net output:
   ```
-  curl -X POST http://192.168.178.25:8420/api/artnet/enabled \
+  curl -X POST http://127.0.0.1:8420/api/artnet/enabled \
        -H "Content-Type: application/json" -d '{"enabled": false}'
   ```
   …and re-enable when you're done.

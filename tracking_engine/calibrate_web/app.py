@@ -96,7 +96,7 @@ def _load_runtime_config() -> dict[str, Any]:
     api_base = str(
         os.environ.get("MARO_API_BASE")
         or maro_cfg.get("api_base")
-        or "http://192.168.178.25:8420"
+        or "http://127.0.0.1:8420"
     ).strip()
     cache_rel = str(maro_cfg.get("assets_cache_dir") or "calibration/maro_cache")
     cache_dir = _resolve(cfg_dir, cache_rel)

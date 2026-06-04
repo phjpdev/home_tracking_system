@@ -70,7 +70,7 @@ def main() -> int:
     ap.add_argument(
         "--maro-api",
         default=None,
-        help="Maro API base URL (default from config or http://192.168.178.25:8420)",
+        help="Maro API base URL (default from config or http://127.0.0.1:8420)",
     )
     ap.add_argument("--host", default="0.0.0.0", help="bind host (default 0.0.0.0)")
     ap.add_argument("--port", type=int, default=8090, help="bind port (default 8090)")

@@ -79,6 +79,40 @@ sudo systemctl restart tracking-engine
 Anything stable you change on the Pi: copy back into `~/home_tracking_system`,
 commit, and push, otherwise the next install run will silently overwrite it.
 
+### 1.2 Deploy config changes via git (do not hand-edit `/opt` only)
+
+Maro and tracking both run on **`maro-head`**. Shipped defaults use loopback:
+
+- `maro.api_base: http://127.0.0.1:8420`
+- `poster.url: http://127.0.0.1:8420/tracking/positions`
+
+On the Pi after you push from your workstation:
+
+```bash
+cd ~/home_tracking_system
+git pull
+sudo bash deploy/scripts/install.sh    # rsync → /opt/tracking-system
+sudo systemctl restart tracking-engine
+sudo systemctl enable --now tracking-calibrate-web   # first time only
+sudo systemctl restart tracking-calibrate-web
+```
+
+Start **Maro** (separate checkout, not this repo) before calibration or tracking:
+
+```bash
+cd ~/maro-clean
+.venv/bin/uvicorn src.maro.web.app:app --host 0.0.0.0 --port 8420
+```
+
+- **Maro UI (browser):** `http://192.168.178.100:8420/` (LAN) or Tailscale IP `:8420`
+- **Tracking calibration UI:** port **8090** — `ssh -L 8090:127.0.0.1:8090 pi@maro-head` → `http://localhost:8090`
+
+Verify Maro from the Pi:
+
+```bash
+curl -sf http://127.0.0.1:8420/api/zones | head -c 120
+```
+
 ## 2. Probe the seven RTSP streams
 
 The home runs on `192.168.178.0/24` (FRITZ!Box subnet). Cameras live at
@@ -235,13 +269,14 @@ Short handover: [`calibration_day_handover.md`](calibration_day_handover.md).
    curl -s http://127.0.0.1:8420/api/strips -o .../maro_cache/strips.json
    ```
 
-2. Start UI on the Pi:
+2. Enable calibration UI (installed by `deploy/scripts/install.sh`):
 
    ```bash
-   python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090
+   sudo systemctl enable --now tracking-calibrate-web
    ```
 
-3. From laptop: `ssh -L 8090:127.0.0.1:8090 maro@maro-head...` → open `http://localhost:8090`.
+3. From laptop: `ssh -L 8090:127.0.0.1:8090 pi@maro-head` → open `http://localhost:8090`.
+   (Foreground debug: `/opt/tracking-system/.venv/bin/python -m tracking_engine.calibrate_web`.)
 
 4. For each camera: click **6–8 landmarks** on the Maro plan, then the same features in
    each camera tile (door corners, lamps, strips). Target mean residual **≤ 5 px** (green ✓).
@@ -259,7 +294,7 @@ Off-site with stills:
 
 ```powershell
 python -m tracking_engine.calibrate_web `
-  --maro-api http://192.168.178.25:8420 `
+  --maro-api http://127.0.0.1:8420 `
   --video cam_kwz_sw=stills/cam_kwz_sw.png ...
 ```
 

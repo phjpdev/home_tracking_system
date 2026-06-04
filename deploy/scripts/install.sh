@@ -75,9 +75,10 @@ sudo -u tracking "${APP_DIR}/.venv/bin/pip" install --upgrade pip
 sudo -u tracking "${APP_DIR}/.venv/bin/pip" install -r "${APP_DIR}/tracking_engine/requirements.txt"
 
 echo "[install] installing systemd units"
-install -m 0644 "${APP_DIR}/deploy/systemd/tracking-engine.service"      /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/tracking-thermal.service"     /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/tracking-enroll-web.service"  /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/tracking-engine.service"         /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/tracking-calibrate-web.service" /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/tracking-thermal.service"      /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/tracking-enroll-web.service"   /etc/systemd/system/
 systemctl daemon-reload
 
 echo "[install] installing cron jobs"
@@ -107,6 +108,7 @@ echo "Next steps:"
 echo "  1. Calibrate cameras (see docs/production_camera_only_runbook.md §3)."
 echo "  2. (Phase D) Generate the face-embedding key:"
 echo "     sudo -u tracking ${APP_DIR}/.venv/bin/python -m tracking_engine.reid.crypto --generate /etc/tracking-engine/secret.key"
-echo "  3. Edit ${APP_DIR}/tracking_engine/config.multi_camera.yaml as needed."
-echo "  4. systemctl enable --now tracking-engine"
+echo "  3. Start Maro on this Pi (separate repo): cd ~/maro-clean && .venv/bin/uvicorn src.maro.web.app:app --host 0.0.0.0 --port 8420"
+echo "     Tracking config uses http://127.0.0.1:8420 (see config.multi_camera.yaml)."
+echo "  4. systemctl enable --now tracking-engine tracking-calibrate-web"
 echo "     (leave tracking-thermal and tracking-enroll-web disabled until phases B/D)"

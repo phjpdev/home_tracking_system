@@ -28,7 +28,7 @@ Use [`config.multi_camera.yaml`](config.multi_camera.yaml):
 
 ### Calibration
 
-- **Recommended: Maro plan-pixel UI** ([`calibrate_web`](calibrate_web/__init__.py)). Click shared **landmarks** on the Maro floor plan and in each camera still (door corners, lamps). Homography maps camera pixels → plan pixels Maro draws directly. Residuals in **px** (target ≤ 5 px mean; save gate 8 px). Works off-site with `--video cam_*=stills/...` and `--maro-api http://192.168.178.25:8420`.
+- **Recommended: Maro plan-pixel UI** ([`calibrate_web`](calibrate_web/__init__.py)). Click shared **landmarks** on the Maro floor plan and in each camera still (door corners, lamps). Homography maps camera pixels → plan pixels Maro draws directly. Residuals in **px** (target ≤ 5 px mean; save gate 8 px). Works off-site with `--video cam_*=stills/...` and `--maro-api http://127.0.0.1:8420` (Maro on Pi).
 
   ```bash
   python -m tracking_engine.calibrate_web --host 0.0.0.0 --port 8090

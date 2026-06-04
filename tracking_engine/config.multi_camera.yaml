@@ -56,8 +56,10 @@ calibration_file: calibration/camera_calibrations.json
 intrinsics_file: calibration/camera_intrinsics.json
 
 # Maro floor-plan (plan-pixel calibration + zone boundaries for fusion).
+# Maro runs on the same Pi as tracking (~/maro-clean, uvicorn :8420). Use loopback
+# for the engine; open the UI in a browser at http://<pi-lan-ip>:8420/ (e.g. .100).
 maro:
-  api_base: http://192.168.178.25:8420
+  api_base: http://127.0.0.1:8420
   assets_cache_dir: calibration/maro_cache
 
 calibration:
@@ -102,22 +104,16 @@ tracking:
     cluster_distance_px: 120.0
     ema_alpha: 0.5
     ema_reset_gap_sec: 1.0
-    drop_outside_zones: false   # until Maro adds Hallway/Flur zone polygon
+    drop_outside_zones: true    # requires HA + room polygons in Maro /api/zones
     max_speed_pxps: 1500.0
     outlier_release_after: 5
 
 poster:
-  # Live Maro tracking service on the LAN. Confirmed reachable from the Pi
-  # (192.168.178.0/24) on 2026-05-22; plain HTTP, no auth.
-  # Set ``dry_run: true`` and rewrite the URL back to 127.0.0.1:8765 for local
-  # smoke tests (mock_maro_server.py).
-  url: http://192.168.178.25:8420/tracking/positions
-  # ``events_url`` is only used by the thermal pipeline (Phase C, currently
-  # disabled). Maro server returned 404 for /tracking/events on 2026-05-22 —
-  # the route hasn't been implemented yet on the client side. Leave the URL
-  # configured so it just works once they add the route; the camera-only
-  # engine ignores it.
-  events_url: http://192.168.178.25:8420/tracking/events
+  # Same host as ``maro.api_base`` (Maro on Pi). Set ``dry_run: true`` and
+  # ``url: http://127.0.0.1:8765/tracking/positions`` for mock_maro_server.py only.
+  url: http://127.0.0.1:8420/tracking/positions
+  # Thermal pipeline only; enable when Maro implements /tracking/events.
+  events_url: http://127.0.0.1:8420/tracking/events
   timeout_sec: 3.0
   dry_run: false
   verify_tls: true
