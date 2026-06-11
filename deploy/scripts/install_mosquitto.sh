@@ -20,13 +20,11 @@ PWFILE=/etc/mosquitto/passwd
 install -d -m 0755 "${CONF_DIR}"
 
 cat > "${CONF}" <<'EOF'
-# Tracking system — local-LAN only Mosquitto config.
+# Tracking system — auth + listener only.
+# persistence/log_dest live in /etc/mosquitto/mosquitto.conf (do not duplicate).
 listener 1883
 allow_anonymous false
 password_file /etc/mosquitto/passwd
-persistence true
-persistence_location /var/lib/mosquitto/
-log_dest syslog
 EOF
 
 if [ ! -f "${PWFILE}" ]; then
