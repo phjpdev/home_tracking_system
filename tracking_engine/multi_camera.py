@@ -307,10 +307,12 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
     coord_note = "maro_plan_px" if use_plan_px else "legacy_mm"
     fusion_note = " fused_post" if fused_post else ""
+    det_class_id = int((cfg.get("detector") or {}).get("class_id", 0))
     print(
         f"[multi] cameras={len(cameras)} layout={layout_path.name} "
         f"coords={coord_note}{fusion_note} "
-        f"detector={detector.backend()} POST={poster.url} dry_run={poster.dry_run}",
+        f"detector={detector.backend()} class_id={det_class_id} "
+        f"POST={poster.url} dry_run={poster.dry_run}",
         file=sys.stderr,
     )
     rotated = [(c["name"], r) for c, r in zip(cameras, rotations) if r]
