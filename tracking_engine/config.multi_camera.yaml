@@ -128,8 +128,8 @@ poster:
 # Phase C — thermal pipeline. ``python -m tracking_engine.thermal.run`` reads
 # this same YAML and the ``multi_camera.cameras_layout_file`` for geometry.
 thermal:
-  enabled: false
-  dry_run: true
+  enabled: true
+  dry_run: false
   # Falls -> poster.events_url; live dots -> poster.url (override with positions_url).
   positions_url: null
   mqtt:
