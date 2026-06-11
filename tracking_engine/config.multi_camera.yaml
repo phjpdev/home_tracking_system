@@ -136,7 +136,7 @@ thermal:
     host: 127.0.0.1
     port: 1883
     user: tracking
-    password: change-me
+    password: Account123!@#
     topic_prefix: home
     publish_presence: true
   rooms: [SZ, BZ]
