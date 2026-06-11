@@ -22,6 +22,7 @@ def create_detector(cfg: dict[str, Any]) -> tuple[PersonDetector, Any]:
     dcfg = cfg.get("detector", {})
     backend = str(dcfg.get("backend", "auto")).lower()
     conf = float(dcfg.get("conf", 0.4))
+    class_id = int(dcfg.get("class_id", 0))  # COCO: 0=person, 56=chair
     hef = str(dcfg.get("hailo_hef", "/usr/share/hailo-models/yolov8s_h8l.hef"))
     weights = str(dcfg.get("yolo_weights", "yolov8n.pt"))
 
@@ -29,7 +30,7 @@ def create_detector(cfg: dict[str, Any]) -> tuple[PersonDetector, Any]:
     hef_ok = Path(hef).is_file()
 
     if want_hailo and backend != "cpu" and hailo_detector_available() and hef_ok:
-        det = HailoPicamera2Detector(hef, conf)
+        det = HailoPicamera2Detector(hef, conf, class_id)
         return det, det.close
 
     if backend == "hailo":
@@ -37,5 +38,5 @@ def create_detector(cfg: dict[str, Any]) -> tuple[PersonDetector, Any]:
             f"Hailo backend requested but unavailable (picamera2 Hailo or HEF missing: {hef})"
         )
 
-    det = UltralyticsCpuDetector(weights, conf)
+    det = UltralyticsCpuDetector(weights, conf, class_id)
     return det, None

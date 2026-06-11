@@ -72,6 +72,8 @@ detector:
   yolo_weights: yolov8n.pt
   hailo_hef: /usr/share/hailo-models/yolov8s_h8l.hef
   conf: 0.4
+  # COCO class: 0 = person (production). 56 = chair (client demo / calibration without a person).
+  class_id: 0
 
 # One-shot LED map calibration (tools/calibrate_led_sequence.py).
 auto_calibration:

@@ -10,15 +10,16 @@ import numpy as np
 if TYPE_CHECKING:
     import supervision as sv
 
-PERSON_CLASS_ID = 0
+DEFAULT_CLASS_ID = 0  # COCO person; 56 = chair (floor-plan test proxy)
 
 
 class UltralyticsCpuDetector:
-    def __init__(self, weights: str, conf: float):
+    def __init__(self, weights: str, conf: float, class_id: int = DEFAULT_CLASS_ID):
         from ultralytics import YOLO
 
         self._model = YOLO(weights)
         self._conf = conf
+        self._class_id = int(class_id)
 
     def detect(
         self,
@@ -30,7 +31,7 @@ class UltralyticsCpuDetector:
         t0 = time.perf_counter()
         results = self._model(
             frame,
-            classes=[PERSON_CLASS_ID],
+            classes=[self._class_id],
             conf=self._conf,
             verbose=False,
         )[0]

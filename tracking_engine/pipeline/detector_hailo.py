@@ -15,7 +15,7 @@ from typing import Callable, List, Optional, Tuple
 import cv2
 import numpy as np
 
-PERSON_CLASS_ID = 0
+DEFAULT_CLASS_ID = 0  # COCO person; 56 = chair (floor-plan test proxy)
 
 
 def _extract_yolo_detections(
@@ -67,13 +67,14 @@ def _extract_yolo_detections(
 
 
 class HailoPicamera2Detector:
-    def __init__(self, hef_path: str, conf: float):
+    def __init__(self, hef_path: str, conf: float, class_id: int = DEFAULT_CLASS_ID):
         from picamera2.devices import Hailo
 
         self._hailo = Hailo(hef_path)
         self._hailo.__enter__()
         self._model_h, self._model_w, _ = self._hailo.get_input_shape()
         self._conf = conf
+        self._class_id = int(class_id)
 
     def close(self) -> None:
         try:
@@ -90,7 +91,7 @@ class HailoPicamera2Detector:
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         results = self._hailo.run(rgb)
         xyxy_s, conf, cls = _extract_yolo_detections(
-            results, self._model_w, self._model_h, PERSON_CLASS_ID, self._conf
+            results, self._model_w, self._model_h, self._class_id, self._conf
         )
         if len(xyxy_s) > 0:
             sx = ow / self._model_w
