@@ -1,4 +1,4 @@
-"""paho-mqtt subscriber that decodes thermal frames + door/leak events."""
+"""paho-mqtt subscriber that decodes thermal frames + door/leak/heartbeat events."""
 
 from __future__ import annotations
 
@@ -35,6 +35,12 @@ class DoorStateMessage:
     open: bool
 
 
+@dataclass
+class HeartbeatMessage:
+    room: str
+    online: bool
+
+
 class MqttSubscriber:
     """Threaded paho-mqtt client. Decodes payloads and dispatches callbacks."""
 
@@ -45,6 +51,7 @@ class MqttSubscriber:
         on_thermal: Callable[[ThermalFrameMessage], None],
         on_leak: Optional[Callable[[LeakStateMessage], None]] = None,
         on_door: Optional[Callable[[DoorStateMessage], None]] = None,
+        on_heartbeat: Optional[Callable[[HeartbeatMessage], None]] = None,
     ):
         try:
             import paho.mqtt.client as mqtt  # type: ignore
@@ -57,6 +64,7 @@ class MqttSubscriber:
         self._on_thermal = on_thermal
         self._on_leak = on_leak
         self._on_door = on_door
+        self._on_heartbeat = on_heartbeat
         self._mqtt = mqtt
         self._client = mqtt.Client(
             client_id=f"tracking-thermal-{int(time.time())}",
@@ -97,6 +105,7 @@ class MqttSubscriber:
             client.subscribe(f"{prefix}/{room}/thermal/frame", qos=0)
             client.subscribe(f"{prefix}/{room}/door/state", qos=1)
             client.subscribe(f"{prefix}/{room}/leak/state", qos=1)
+            client.subscribe(f"{prefix}/{room}/node/heartbeat", qos=1)
 
     def _on_disconnect(self, _client, _userdata, rc, *args) -> None:
         print(f"[thermal-mqtt] disconnected rc={rc}; auto-reconnect by loop", file=sys.stderr)
@@ -120,6 +129,18 @@ class MqttSubscriber:
             self._on_door(DoorStateMessage(room=room, open=(payload.strip().lower() == "open")))
         elif kind == "leak" and parts[3] == "state" and self._on_leak is not None:
             self._on_leak(LeakStateMessage(room=room, wet=(payload.strip().lower() == "wet")))
+        elif kind == "node" and parts[3] == "heartbeat" and self._on_heartbeat is not None:
+            self._dispatch_heartbeat(room, payload)
+
+    def _dispatch_heartbeat(self, room: str, payload: str) -> None:
+        online = False
+        try:
+            data = json.loads(payload)
+            state = str(data.get("state", "")).lower()
+            online = state == "online"
+        except json.JSONDecodeError:
+            online = payload.strip().lower() == "online"
+        self._on_heartbeat(HeartbeatMessage(room=room, online=online))
 
     def _dispatch_thermal(self, room: str, payload: str) -> None:
         try:

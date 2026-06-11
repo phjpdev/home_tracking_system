@@ -214,7 +214,8 @@ It complements manual [`calibration_maro_plan_px.md`](calibration_maro_plan_px.m
 | Optical stereo | Track in K/WZ, Yoga, Hallway |
 | Conflict | Thermal wins for zone; optical wins for plan position outside privacy polygons |
 
-See [`camera_placement_plan/thermal_fall_detection.py`](../camera_placement_plan/thermal_fall_detection.py) and MASTER_PLAN Phase C.
+See [`camera_placement_plan/thermal_fall_detection.py`](../camera_placement_plan/thermal_fall_detection.py),
+MASTER_PLAN Phase C, and [`privacy_zone_production_runbook.md`](privacy_zone_production_runbook.md).
 
 ---
 

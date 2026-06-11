@@ -133,6 +133,9 @@ observability:
 Per [../esphome/README.md](../esphome/README.md). USB cable for first
 flash, OTA after that.
 
+Full SZ/BZ bring-up (soak test, live dots, fall tuning):
+[privacy_zone_production_runbook.md](privacy_zone_production_runbook.md).
+
 ## 9. Start services
 
 ```bash

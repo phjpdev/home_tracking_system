@@ -107,6 +107,10 @@ tracking:
     drop_outside_zones: true    # requires HA + room polygons in Maro /api/zones
     max_speed_pxps: 1500.0
     outlier_release_after: 5
+  # Suppress optical dots near SZ/BZ when thermal presence MQTT says occupied.
+  thermal_gate:
+    enabled: false
+    boundary_buffer_px: 80.0
 
 poster:
   # Same host as ``maro.api_base`` (Maro on Pi). Set ``dry_run: true`` and
@@ -126,13 +130,26 @@ poster:
 thermal:
   enabled: false
   dry_run: true
+  # Falls -> poster.events_url; live dots -> poster.url (override with positions_url).
+  positions_url: null
   mqtt:
     host: 127.0.0.1
     port: 1883
     user: tracking
     password: change-me
     topic_prefix: home
+    publish_presence: true
   rooms: [SZ, BZ]
+  mount_offset_mm:
+    SZ: [0, 0]
+    BZ: [0, 0]
+  positions:
+    enabled: true
+    post_hz: 2.0
+    ema_alpha: 0.25
+    hold_sec: 2.0
+    min_blob_pixels: 3
+    suppress_when_door_closed: false
   detection:
     event_throttle_sec: 30.0
     body_temp_min_c: 28.0

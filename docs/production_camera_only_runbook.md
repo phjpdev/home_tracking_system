@@ -637,8 +637,8 @@ under `_ensure_schema`.
 
 | Feature | Status | Re-enable when |
 |---------|--------|----------------|
-| Thermal MLX90640 + ESP32 nodes | hardware not yet shipped | sensors arrive — see [`plan/MASTER_PLAN.md`](../plan/MASTER_PLAN.md) §6 |
-| Fall-event POST | depends on thermal | same |
+| Thermal MLX90640 + ESP32 nodes | **off by default** (`thermal.enabled: false`) | hardware mounted — see [`privacy_zone_production_runbook.md`](privacy_zone_production_runbook.md) |
+| Thermal live dots + fall POST | implemented; needs `tracking-thermal` + Maro | same runbook §4–5 |
 | Face recognition (`reid.face.enabled`) | needs SCRFD + ArcFace ONNX + per-person consent | enrolment day; see [`enrollment_user_guide.md`](enrollment_user_guide.md) |
 | Whole-disk encryption (LUKS) | optional | before storing face embeddings; see [`gdpr/luks_setup.md`](gdpr/luks_setup.md) |
 | Face-embedding key | only matters when face is on | before flipping face on |

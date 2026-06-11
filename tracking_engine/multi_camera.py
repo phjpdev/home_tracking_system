@@ -24,6 +24,12 @@ from .pipeline.homography import (
 )
 from .pipeline.plan_fusion import PlanFusionConfig, PlanFusionCoordinator, zones_from_overlay
 from .pipeline.stereo_foot import StereoFootConfig, StereoFootCoordinator
+from .pipeline.thermal_gate import (
+    ThermalGateConfig,
+    ThermalPresenceTracker,
+    apply_thermal_gate,
+    privacy_zones_mm_to_plan_px,
+)
 from .pipeline.ingest import FrameSource, open_rtsp, open_rtsp_latest, open_video
 from .pipeline.latency import LatencyMonitor
 from .pipeline.poster import PositionPoster
@@ -221,6 +227,50 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             ),
             zones,
         )
+
+    thermal_gate_cfg_raw = track_defaults.get("thermal_gate") or {}
+    thermal_gate_tracker: Optional[ThermalPresenceTracker] = None
+    privacy_zones_plan_px: dict[str, list[tuple[float, float]]] = {}
+    thermal_gate_enabled = bool(thermal_gate_cfg_raw.get("enabled", False))
+    thermal_gate_buffer = float(thermal_gate_cfg_raw.get("boundary_buffer_px", 80.0))
+    if thermal_gate_enabled:
+        thermal_mqtt = (cfg.get("thermal") or {}).get("mqtt") or {}
+        gate_rooms = (cfg.get("thermal") or {}).get("rooms") or ["SZ", "BZ"]
+        thermal_gate_tracker = ThermalPresenceTracker(
+            ThermalGateConfig(
+                enabled=True,
+                boundary_buffer_px=thermal_gate_buffer,
+                mqtt_host=str(thermal_mqtt.get("host", "127.0.0.1")),
+                mqtt_port=int(thermal_mqtt.get("port", 1883)),
+                mqtt_user=thermal_mqtt.get("user"),
+                mqtt_password=thermal_mqtt.get("password"),
+                topic_prefix=str(thermal_mqtt.get("topic_prefix", "home")),
+                rooms=tuple(str(r).upper() for r in gate_rooms),
+            )
+        )
+        thermal_gate_tracker.start()
+        try:
+            import json as _json
+
+            from .pipeline.maro_floorplan import load_maro_floorplan
+
+            layout_rel = mc.get("cameras_layout_file")
+            gate_layout_path = Path(str(layout_rel))
+            if not gate_layout_path.is_absolute():
+                gate_layout_path = (cfg_dir / gate_layout_path).resolve()
+            layout_data = _json.loads(gate_layout_path.read_text(encoding="utf-8"))
+            zones_mm = layout_data.get("privacy_thermal_zones_mm") or {}
+            maro_cfg = cfg.get("maro") or {}
+            cache_rel = str(maro_cfg.get("assets_cache_dir") or "calibration/maro_cache")
+            cache_dir = _resolve_path(cfg_dir, cache_rel)
+            api_base = str(maro_cfg.get("api_base") or "http://127.0.0.1:8420")
+            gate_assets = load_maro_floorplan(api_base, cache_dir)
+            privacy_zones_plan_px = privacy_zones_mm_to_plan_px(
+                zones_mm, gate_assets.mm_to_plan_px
+            )
+        except Exception as exc:
+            print(f"[multi] thermal_gate: could not load privacy polygons ({exc})", file=sys.stderr)
+
     stereo_cfg_raw = cfg.get("stereo") or {}
     stereo_enabled = bool(stereo_cfg_raw.get("enabled", False))
     stereo_foot: Optional[StereoFootCoordinator] = None
@@ -487,6 +537,13 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
 
             if fused_post and plan_fusion is not None:
                 fused_persons = plan_fusion.fuse_tick(fusion_rows, ts)
+                if thermal_gate_tracker is not None and thermal_gate_enabled:
+                    fused_persons = apply_thermal_gate(
+                        fused_persons,
+                        presence=thermal_gate_tracker.snapshot(),
+                        privacy_zones_plan_px=privacy_zones_plan_px,
+                        buffer_px=thermal_gate_buffer,
+                    )
                 pending_payloads = [
                     {
                         "cam_id": "fused",
@@ -612,6 +669,8 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             except Exception:
                 pass
         poster.close()
+        if thermal_gate_tracker is not None:
+            thermal_gate_tracker.stop()
         if reid is not None:
             reid.close()
         if det_cleanup:

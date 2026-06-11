@@ -95,6 +95,30 @@ class _Metrics:
                 ["room"],
                 registry=reg,
             )
+            self.thermal_position_posts = Counter(
+                "thermal_position_posts_total",
+                "Position POSTs emitted by the thermal pipeline",
+                ["room"],
+                registry=reg,
+            )
+            self.thermal_blob_area = Gauge(
+                "thermal_blob_area_pixels",
+                "Area of the current heat blob in sensor pixels",
+                ["room"],
+                registry=reg,
+            )
+            self.thermal_room_online = Gauge(
+                "thermal_room_online",
+                "1 when the ESP32 node heartbeat reports online",
+                ["room"],
+                registry=reg,
+            )
+            self.thermal_centroid_plan_px = Gauge(
+                "thermal_centroid_plan_px",
+                "Smoothed thermal centroid on the Maro floor plan (pixels)",
+                ["room", "axis"],
+                registry=reg,
+            )
         else:
             print(
                 "[obs] prometheus_client not installed; metrics are no-ops",
@@ -109,6 +133,10 @@ class _Metrics:
             self.thermal_fall_events = _NoopMetric()
             self.post_failures = _NoopMetric()
             self.thermal_last_event_age = _NoopMetric()
+            self.thermal_position_posts = _NoopMetric()
+            self.thermal_blob_area = _NoopMetric()
+            self.thermal_room_online = _NoopMetric()
+            self.thermal_centroid_plan_px = _NoopMetric()
 
 
 metrics = _Metrics()

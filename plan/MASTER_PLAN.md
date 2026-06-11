@@ -138,7 +138,7 @@ All payload coordinates, polygons, and mount positions use millimetres in this f
 |-------|-------|----------|--------|
 | A.5 | Real body Re-ID (OSNet ONNX) | Week 1 | Pending |
 | B | Privacy-zone sensors (MLX90640 + ESP32) | Week 2 (in parallel with A.5) | Pending |
-| C | Thermal fall detection wired to MQTT and POST | Week 3 | Pending |
+| C | Thermal fall detection + live dots wired to MQTT and POST | Week 3 | Code complete; enable on site — [`docs/privacy_zone_production_runbook.md`](../docs/privacy_zone_production_runbook.md) |
 | D | Face recognition, fusion, enrollment | Week 4–5 | Pending |
 | E | Production hardening | Week 6 | Pending |
 | F | Optional future work | Backlog | Pending |

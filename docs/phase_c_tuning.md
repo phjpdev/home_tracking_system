@@ -1,7 +1,9 @@
 # Phase C — Thermal fall detection tuning notes
 
-Template. Fill in once the privacy-zone hardware is live and the
+Fill in once the privacy-zone hardware is live and the
 `tracking_engine.thermal.run` service is running on the Pi.
+
+**Production setup:** [`privacy_zone_production_runbook.md`](privacy_zone_production_runbook.md).
 
 ## Scenarios to validate
 
