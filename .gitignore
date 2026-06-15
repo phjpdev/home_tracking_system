@@ -2,3 +2,4 @@
 *.step
 .venv/
 venv/
+/maro-clean
