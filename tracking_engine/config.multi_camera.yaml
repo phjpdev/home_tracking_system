@@ -103,7 +103,7 @@ tracking:
     # Median fusion across misaligned homographies hurts stability; use stereo path first.
     enabled: true
     prefer_stereo: true
-    cluster_distance_px: 80
+    cluster_distance_px: 150
     ema_alpha: 0.8
     ema_reset_gap_sec: 1.0
     drop_outside_zones: false    # requires HA + room polygons in Maro /api/zones
