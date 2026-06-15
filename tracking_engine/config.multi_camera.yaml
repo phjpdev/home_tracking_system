@@ -163,7 +163,8 @@ runtime:
   show_preview: false
   # Which layout camera name to visualize when ``show_preview: true`` (must be enabled in ``streams``).
   show_preview_camera: cam_kwz_sw
-  latency_log_every_n_frames: 30
+  # Pi + 7 cams: one tick ≈ 15–40 s → tick=30 can take 10+ min. Use 5–10 while tuning.
+  latency_log_every_n_frames: 10
   max_ticks: 0
   preview_scale: 0.5
 

@@ -383,6 +383,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             first_post_err: str | None = None
             pending_payloads: list[dict[str, Any]] = []
             fusion_rows: list[dict[str, Any]] = []
+            raw_cam_breakdown = ""
             video_eof_stop = False
 
             for idx, cam in enumerate(cameras):
@@ -537,6 +538,15 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
             if stereo_foot is not None and fusion_rows:
                 fusion_rows = stereo_foot.merge_fusion_rows(fusion_rows)
 
+            if fusion_rows:
+                cam_counts: dict[str, int] = {}
+                for row in fusion_rows:
+                    cid = str(row.get("cam_id", "?"))
+                    cam_counts[cid] = cam_counts.get(cid, 0) + 1
+                raw_cam_breakdown = ",".join(
+                    f"{c}={n}" for c, n in sorted(cam_counts.items())
+                )
+
             if fused_post and plan_fusion is not None:
                 fused_persons = plan_fusion.fuse_tick(fusion_rows, ts)
                 if thermal_gate_tracker is not None and thermal_gate_enabled:
@@ -644,10 +654,13 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                     for p in pending_payloads
                     if p.get("persons")
                 ) or "none"
+                raw_note = (
+                    f" raw=[{raw_cam_breakdown}]" if raw_cam_breakdown else ""
+                )
                 print(
                     f"[multi] tick={tick} persons={tick_persons} "
-                    f"active_cams={tick_active}/{len(cameras)} ({breakdown})  "
-                    f"{lat_all.summary_line()}",
+                    f"active_cams={tick_active}/{len(cameras)} ({breakdown})"
+                    f"{raw_note}  {lat_all.summary_line()}",
                     file=sys.stderr,
                 )
 
