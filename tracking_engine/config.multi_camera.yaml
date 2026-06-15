@@ -125,7 +125,7 @@ poster:
   verify_tls: true
   include_latency_in_post: false
   # When true, one POST per tick with cam_id "fused" (median across cameras + EMA).
-  fused_mode: false
+  fused_mode: true
 
 # Phase C — thermal pipeline. ``python -m tracking_engine.thermal.run`` reads
 # this same YAML and the ``multi_camera.cameras_layout_file`` for geometry.
