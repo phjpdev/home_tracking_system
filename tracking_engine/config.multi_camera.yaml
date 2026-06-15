@@ -106,9 +106,13 @@ tracking:
     cluster_distance_px: 150
     ema_alpha: 0.8
     ema_reset_gap_sec: 1.0
-    drop_outside_zones: false    # requires HA + room polygons in Maro /api/zones
+    drop_outside_zones: true    # requires HA + room polygons in Maro /api/zones
     max_speed_pxps: 1500.0
     outlier_release_after: 5
+    # Keep a dot alive at its last position this many seconds after it was last seen.
+    # CPU ticks are ~5 s, so 12 s bridges ~2 missed detections (single-camera chairs
+    # that flicker). Set 0 to disable. Lower for fast-moving people if dots "smear".
+    hold_sec: 12.0
   # Suppress optical dots near SZ/BZ when thermal presence MQTT says occupied.
   thermal_gate:
     enabled: false

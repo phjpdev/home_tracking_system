@@ -224,6 +224,7 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                 max_speed_pxps=float(fusion_cfg_raw.get("max_speed_pxps", 1500.0)),
                 outlier_release_after=int(fusion_cfg_raw.get("outlier_release_after", 5)),
                 prefer_stereo=bool(fusion_cfg_raw.get("prefer_stereo", True)),
+                hold_sec=float(fusion_cfg_raw.get("hold_sec", 0.0)),
             ),
             zones,
         )

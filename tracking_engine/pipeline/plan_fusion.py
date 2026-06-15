@@ -57,6 +57,10 @@ class PlanFusionConfig:
     max_speed_pxps: float = 1500.0
     # After this many consecutive outliers, accept the new value (real teleport / re-id swap).
     outlier_release_after: int = 5
+    # Temporal hold: keep re-emitting a fused dot at its last position for this many
+    # seconds after it was last seen, so detections that flicker out for a tick or two
+    # (single-camera objects, brief occlusion) don't blink off. 0 disables (default).
+    hold_sec: float = 0.0
 
 
 class PlanFusionCoordinator:
@@ -66,6 +70,9 @@ class PlanFusionCoordinator:
         self._ema: dict[str, tuple[float, float]] = {}
         self._ema_ts: dict[str, float] = {}
         self._outlier_count: dict[str, int] = {}
+        # Temporal hold store: stable_key -> {"person": dict, "ts": float}
+        self._held: dict[str, dict[str, Any]] = {}
+        self._hold_counter: int = 0
 
     def _zone_for_point(self, x: float, y: float) -> str:
         for z in self._zones:
@@ -155,7 +162,60 @@ class PlanFusionCoordinator:
             if gid:
                 person["global_id"] = gid
             fused.append(person)
-        return fused
+
+        return self._apply_hold(fused, ts)
+
+    def _apply_hold(
+        self, fused: list[dict[str, Any]], ts: float
+    ) -> list[dict[str, Any]]:
+        """Re-emit recently-seen dots that vanished for a few ticks.
+
+        Matches this tick's fused dots to previously held ones by proximity
+        (``cluster_distance_px``), refreshes the matches, and re-emits any held
+        dot that wasn't seen this tick but is still within ``hold_sec``.
+        """
+        if self._cfg.hold_sec <= 0:
+            return fused
+
+        radius = self._cfg.cluster_distance_px
+        used_keys: set[str] = set()
+
+        # Refresh held entries with this tick's detections (proximity match).
+        for person in fused:
+            px, py = float(person["x"]), float(person["y"])
+            best_key: Optional[str] = None
+            best_dist = radius
+            for hk, h in self._held.items():
+                if hk in used_keys:
+                    continue
+                hp = h["person"]
+                d = _hypot(px - float(hp["x"]), py - float(hp["y"]))
+                if d <= best_dist:
+                    best_dist = d
+                    best_key = hk
+            if best_key is None:
+                self._hold_counter += 1
+                best_key = f"h{self._hold_counter}"
+            used_keys.add(best_key)
+            self._held[best_key] = {"person": person, "ts": ts}
+
+        # Re-emit held dots that weren't seen this tick but are still fresh.
+        out = list(fused)
+        for hk, h in self._held.items():
+            if hk in used_keys:
+                continue
+            if ts - float(h["ts"]) <= self._cfg.hold_sec:
+                held_person = dict(h["person"])
+                held_person["held"] = True
+                out.append(held_person)
+
+        # Prune expired entries.
+        self._held = {
+            hk: h
+            for hk, h in self._held.items()
+            if ts - float(h["ts"]) <= self._cfg.hold_sec
+        }
+        return out
 
     def _smooth(self, track_id: str, x: float, y: float, ts: float) -> tuple[float, float]:
         prev = self._ema.get(track_id)
