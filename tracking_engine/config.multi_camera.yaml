@@ -117,13 +117,18 @@ stereo:
 tracking:
   zone: unknown
   default_privacy: false
+  # Foot-point filters (homography assumes floor z=0). Skip clipped/partial bboxes
+  # at the frame bottom — e.g. person leaning on kitchen counter projects onto island.
+  geom:
+    max_foot_v_ratio: 0.92   # skip if bbox bottom below this fraction of frame height
+    min_bbox_height_px: 60
   plan_fusion:
     enabled: true
     prefer_stereo: true
-    cluster_distance_px: 80
-    ema_alpha: 0.6
+    cluster_distance_px: 100   # merge same person across 4 K/WZ cams (~70cm)
+    ema_alpha: 0.5
     ema_reset_gap_sec: 1.0
-    hold_sec: 5.0
+    hold_sec: 0.0              # OFF for people — hold causes ghost dots when moving
     drop_outside_zones: true
     max_speed_pxps: 1500.0
     outlier_release_after: 5

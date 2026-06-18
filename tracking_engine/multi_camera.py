@@ -194,6 +194,9 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
     track_defaults = cfg.get("tracking", {}) or {}
     default_privacy = bool(track_defaults.get("default_privacy", False))
     zone_fallback = str(track_defaults.get("zone", "unknown"))
+    geom_cfg = track_defaults.get("geom") or {}
+    max_foot_v_ratio = float(geom_cfg.get("max_foot_v_ratio", 1.0))
+    min_bbox_height_px = float(geom_cfg.get("min_bbox_height_px", 0))
     use_plan_px = False
     if calibrations:
         use_plan_px = calibrations[0].coordinate_space == COORD_MARO_PLAN_PX
@@ -434,8 +437,13 @@ def run(cfg_path: Path, video_overrides: dict[str, str]) -> int:
                         if tid is None:
                             continue
                         x1, y1, x2, y2 = [float(v) for v in xyxy]
+                        bbox_h = y2 - y1
+                        if min_bbox_height_px > 0 and bbox_h < min_bbox_height_px:
+                            continue
                         foot_u = (x1 + x2) / 2.0
                         foot_v = y2
+                        if max_foot_v_ratio < 1.0 and foot_v > fh * max_foot_v_ratio:
+                            continue
                         if calibration.coordinate_space == COORD_MARO_PLAN_PX:
                             px_x, px_y = foot_point_to_plan_px(
                                 calibration, foot_u, foot_v, fw, fh
