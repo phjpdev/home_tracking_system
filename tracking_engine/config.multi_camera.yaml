@@ -67,13 +67,26 @@ calibration:
   require_min_points: 6
   save_residual_px_max: 8.0
 
+# =============================================================================
+# DETECTOR — switch mode: comment one block, uncomment the other, restart engine.
+# COCO class_id: 0 = person (production), 56 = chair (floor-plan demo / cal test)
+# =============================================================================
+
+# --- Human tracking (active) ---
 detector:
   backend: auto
   yolo_weights: yolov8n.pt
   hailo_hef: /usr/share/hailo-models/yolov8s_h8l.hef
-  conf: 0.45
-  # COCO class: 0 = person (production). 56 = chair (client demo / calibration without a person).
-  class_id: 56
+  conf: 0.35
+  class_id: 0
+
+# --- Chair tracking (inactive) ---
+# detector:
+#   backend: auto
+#   yolo_weights: yolov8n.pt
+#   hailo_hef: /usr/share/hailo-models/yolov8s_h8l.hef
+#   conf: 0.45
+#   class_id: 56
 
 # One-shot LED map calibration (tools/calibrate_led_sequence.py).
 auto_calibration:
@@ -96,27 +109,45 @@ stereo:
   max_match_plan_px: 150.0
   max_reproj_error_px: 12.0
 
+# =============================================================================
+# TRACKING / FUSION — switch with detector block above. fused_mode lives under poster.
+# =============================================================================
+
+# --- Human tracking (active) ---
 tracking:
   zone: unknown
   default_privacy: false
   plan_fusion:
-    # Median fusion across misaligned homographies hurts stability; use stereo path first.
     enabled: true
     prefer_stereo: true
-    cluster_distance_px: 150
-    ema_alpha: 0.8
+    cluster_distance_px: 80
+    ema_alpha: 0.6
     ema_reset_gap_sec: 1.0
-    drop_outside_zones: true    # requires HA + room polygons in Maro /api/zones
+    hold_sec: 5.0
+    drop_outside_zones: true
     max_speed_pxps: 1500.0
     outlier_release_after: 5
-    # Keep a dot alive at its last position this many seconds after it was last seen.
-    # CPU ticks are ~5 s, so 12 s bridges ~2 missed detections (single-camera chairs
-    # that flicker). Set 0 to disable. Lower for fast-moving people if dots "smear".
-    hold_sec: 12.0
-  # Suppress optical dots near SZ/BZ when thermal presence MQTT says occupied.
   thermal_gate:
     enabled: false
     boundary_buffer_px: 80.0
+
+# --- Chair tracking (inactive) ---
+# tracking:
+#   zone: unknown
+#   default_privacy: false
+#   plan_fusion:
+#     enabled: true
+#     prefer_stereo: true
+#     cluster_distance_px: 150
+#     ema_alpha: 0.8
+#     ema_reset_gap_sec: 1.0
+#     hold_sec: 12.0
+#     drop_outside_zones: true
+#     max_speed_pxps: 1500.0
+#     outlier_release_after: 5
+#   thermal_gate:
+#     enabled: false
+#     boundary_buffer_px: 80.0
 
 poster:
   # Same host as ``maro.api_base`` (Maro on Pi). Set ``dry_run: true`` and
