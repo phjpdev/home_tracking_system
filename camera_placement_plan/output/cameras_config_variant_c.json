@@ -567,7 +567,7 @@
         "x_mm": 14200,
         "y_mm": 8700,
         "z_mm": 3000,
-        "yaw_deg": 330,
+        "yaw_deg": 335,
         "tilt_deg": 35
       },
       "sensor": {
@@ -603,8 +603,8 @@
         "x_mm": 14100,
         "y_mm": 8200,
         "z_mm": 3000,
-        "yaw_deg": 180,
-        "tilt_deg": 35
+        "yaw_deg": 175,
+        "tilt_deg": 42.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -630,5 +630,10 @@
       "rotate_deg": 90,
       "as_built_mount_height_cm": 246
     }
-  ]
+  ],
+  "layout_variant": {
+    "id": "c",
+    "label": "Hallway + Yoga/hallway handover focus",
+    "status": "candidate"
+  }
 }

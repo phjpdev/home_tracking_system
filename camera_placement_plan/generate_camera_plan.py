@@ -77,6 +77,8 @@ The script expects ./floor_plan.png to be present alongside it.
 """
 
 from pathlib import Path
+import argparse
+import copy
 import json
 
 import numpy as np
@@ -482,6 +484,121 @@ CAMERAS = [
     # zone-level presence + fall events.
 ]
 
+VARIANT_LABELS: dict[str, str] = {
+    "a": "Baseline (as-built poses)",
+    "b": "Higher overlap for BEV stitch (K/WZ + Yoga)",
+    "c": "Hallway + Yoga/hallway handover focus",
+}
+
+# Tape-measured on site 2026-05-21; preserved across JSON exports.
+AS_BUILT_MEASUREMENTS_2026_05_21: dict = {
+    "_doc": (
+        "Tape-measured by the installer (CKiekhoefel) on 2026-05-21. "
+        "Authoritative for calibration; supersedes any architect-plan "
+        "dimension below where they disagree. Units: cm."
+    ),
+    "rooms_cm": {
+        "K_WZ": {
+            "long_axis": 781,
+            "narrow_part_width": 252,
+            "quadratic_part": [388, 288],
+            "note": (
+                "L-shape. Quadratic part (~kitchen/dining) is to-furniture, "
+                "not wall-to-wall: kitchen counter and oven block ~130cm of "
+                "room depth on the wall side."
+            ),
+        },
+        "BZ": [375, 173],
+        "SZ": [410, 308],
+        "Hallway": [309, 87],
+        "Yoga": [353, 363],
+    },
+    "camera_mount_height_cm": {
+        "cam_kwz_sw": 245,
+        "cam_kwz_nw": 246,
+        "cam_kwz_ne": 245,
+        "cam_kwz_se": 245,
+        "cam_yoga_ne": 245,
+        "cam_yoga_se": 246,
+        "cam_hallway_n": 246,
+    },
+    "layout_freeze": {
+        "status": "pending_site_trial",
+        "variant_id": None,
+        "freeze_date": None,
+        "note": (
+            "Fill after on-site A/B/C trial; see docs/layout_freeze.md"
+        ),
+    },
+}
+
+# Per-stream rotate (deg clockwise) from probe stills 2026-05-21; frozen at layout.
+STREAM_ROTATE_DEG: dict[str, int] = {
+    "cam_kwz_sw": 0,
+    "cam_kwz_nw": 0,
+    "cam_kwz_ne": 0,
+    "cam_kwz_se": 0,
+    "cam_yoga_ne": 180,
+    "cam_yoga_se": 180,
+    "cam_hallway_n": 90,
+}
+
+
+def _clone_cameras() -> list[dict]:
+    return copy.deepcopy(CAMERAS)
+
+
+def _set_pose(
+    cams: list[dict],
+    name: str,
+    *,
+    yaw_deg: float | None = None,
+    tilt_deg: float | None = None,
+) -> None:
+    for cam in cams:
+        if cam["name"] == name:
+            if yaw_deg is not None:
+                cam["yaw_deg"] = int(yaw_deg) % 360
+            if tilt_deg is not None:
+                cam["tilt_deg"] = float(tilt_deg)
+            return
+    raise KeyError(f"unknown camera {name!r}")
+
+
+def cameras_for_variant(variant: str) -> list[dict]:
+    """Return a deep copy of CAMERAS with variant-specific yaw/tilt deltas.
+
+    Mount positions (x_mm, y_mm, z_mm) are unchanged — re-aim only.
+    """
+    v = variant.lower()
+    if v == "a":
+        return _clone_cameras()
+    if v == "b":
+        cams = _clone_cameras()
+        for name in (
+            "cam_kwz_sw",
+            "cam_kwz_nw",
+            "cam_kwz_ne",
+            "cam_kwz_se",
+            "cam_yoga_ne",
+            "cam_yoga_se",
+        ):
+            _set_pose(cams, name, tilt_deg=40)
+        # Yaw toward L-shape / room centres for more floor overlap.
+        _set_pose(cams, "cam_kwz_sw", yaw_deg=335)
+        _set_pose(cams, "cam_kwz_nw", yaw_deg=30)
+        _set_pose(cams, "cam_kwz_ne", yaw_deg=150)
+        _set_pose(cams, "cam_kwz_se", yaw_deg=325)
+        _set_pose(cams, "cam_yoga_ne", yaw_deg=160)
+        _set_pose(cams, "cam_yoga_se", yaw_deg=335)
+        return cams
+    if v == "c":
+        cams = _clone_cameras()
+        _set_pose(cams, "cam_hallway_n", yaw_deg=175, tilt_deg=42)
+        _set_pose(cams, "cam_yoga_se", yaw_deg=335)
+        return cams
+    raise ValueError(f"unknown variant {variant!r}; use a, b, or c")
+
 
 # ============================================================
 # 3. Field-of-view geometry
@@ -692,7 +809,11 @@ def draw_camera(ax, cam: dict, clip_path: MplPath) -> None:
             zorder=15)
 
 
-def render_floor_plan() -> None:
+def render_floor_plan(
+    cameras: list[dict] | None = None,
+    out_path: Path | None = None,
+    variant_id: str | None = None,
+) -> Path:
     """Render the placement plan as a single full-width image:
 
       * Floor plan fills the whole figure (no side panel).
@@ -705,6 +826,7 @@ def render_floor_plan() -> None:
     output/cameras_config.json + README.md so the rendered PNG is
     legible at any preview width.
     """
+    cameras = cameras if cameras is not None else CAMERAS
     img = Image.open(FLOOR_PLAN_PATH)
     img_w, img_h = img.size
 
@@ -714,7 +836,7 @@ def render_floor_plan() -> None:
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=160)
     ax.imshow(img, extent=[0, img_w, img_h, 0])
 
-    for cam in CAMERAS:
+    for cam in cameras:
         if not is_inside_interior(cam["x_mm"], cam["y_mm"]):
             print(f"[WARN] cam {cam['id']} ({cam['name']}) at "
                   f"({cam['x_mm']}, {cam['y_mm']}) is OUTSIDE the "
@@ -730,7 +852,7 @@ def render_floor_plan() -> None:
 
     room_clips = {room: trackable_clip_path(room)
                   for room in TRACKABLE_AREAS_MM}
-    for cam in CAMERAS:
+    for cam in cameras:
         draw_camera(ax, cam, room_clips[cam["room"]])
 
     legend_elements = [
@@ -761,28 +883,40 @@ def render_floor_plan() -> None:
     ax.legend(handles=legend_elements, loc="upper left",
               bbox_to_anchor=(0.01, 0.99), fontsize=9, framealpha=0.95)
 
-    fig.suptitle(
+    title = (
         "Camera Placement Plan — Phase 1.5 "
         "(7 cameras incl. hallway; PoE OEM board locked; "
-        "SZ/BZ via thermal-IR fall sensors)",
-        fontsize=12, fontweight="bold", y=0.985,
+        "SZ/BZ via thermal-IR fall sensors)"
     )
+    if variant_id:
+        vid = variant_id.lower()
+        title += f" — Variant {vid.upper()}: {VARIANT_LABELS[vid]}"
+    fig.suptitle(title, fontsize=12, fontweight="bold", y=0.985)
     ax.set_xlim(0, img_w)
     ax.set_ylim(img_h, 0)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.tight_layout()
 
-    out_img = OUTPUT_DIR / "camera_placement_plan.png"
+    out_img = out_path or (OUTPUT_DIR / "camera_placement_plan.png")
     plt.savefig(out_img, dpi=180, bbox_inches="tight",
                 pad_inches=0.25, facecolor="white")
     plt.close(fig)
     print(f"[ok] wrote {out_img}")
+    return out_img
 
 
-def export_config() -> None:
-    config = {
+def export_config(
+    cameras: list[dict] | None = None,
+    out_path: Path | None = None,
+    variant_id: str | None = None,
+) -> Path:
+    cameras = cameras if cameras is not None else CAMERAS
+    config: dict = {
         "phase": "1.5-prototype-poe",
+        "as_built_measurements_2026_05_21": copy.deepcopy(
+            AS_BUILT_MEASUREMENTS_2026_05_21
+        ),
         "coordinate_system": {
             "origin": "NW corner of the floor-plan envelope (top-left)",
             "x_axis": "east (+x = right on plan)",
@@ -969,21 +1103,84 @@ def export_config() -> None:
                     "ir_cut_filter":     True,
                     "firmware_target":   "OpenIPC (after smoke test)",
                 },
+                "rotate_deg": STREAM_ROTATE_DEG.get(cam["name"], 0),
+                "as_built_mount_height_cm": (
+                    AS_BUILT_MEASUREMENTS_2026_05_21[
+                        "camera_mount_height_cm"
+                    ].get(cam["name"])
+                ),
             }
-            for cam in CAMERAS
+            for cam in cameras
         ],
     }
-    out_json = OUTPUT_DIR / "cameras_config.json"
+    if variant_id:
+        vid = variant_id.lower()
+        config["layout_variant"] = {
+            "id": vid,
+            "label": VARIANT_LABELS[vid],
+            "status": "candidate",
+        }
+    out_json = out_path or (OUTPUT_DIR / "cameras_config.json")
     out_json.write_text(json.dumps(config, indent=2))
     print(f"[ok] wrote {out_json}")
+    return out_json
 
 
-if __name__ == "__main__":
+def generate_variant(variant_id: str) -> None:
+    """Render PNG + JSON for one placement variant (a/b/c)."""
+    vid = variant_id.lower()
+    cameras = cameras_for_variant(vid)
+    render_floor_plan(
+        cameras,
+        out_path=OUTPUT_DIR / f"camera_placement_plan_variant_{vid}.png",
+        variant_id=vid,
+    )
+    export_config(
+        cameras,
+        out_path=OUTPUT_DIR / f"cameras_config_variant_{vid}.json",
+        variant_id=vid,
+    )
+
+
+def generate_default_outputs() -> None:
+    """Write canonical camera_placement_plan.png + cameras_config.json (variant A)."""
+    cameras = cameras_for_variant("a")
+    render_floor_plan(cameras, out_path=OUTPUT_DIR / "camera_placement_plan.png")
+    export_config(cameras, out_path=OUTPUT_DIR / "cameras_config.json")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate camera placement PNGs and JSON configs.",
+    )
+    parser.add_argument(
+        "--variant",
+        choices=["a", "b", "c", "all"],
+        default="all",
+        help="Placement variant to generate (default: all three)",
+    )
+    parser.add_argument(
+        "--write-default",
+        action="store_true",
+        help="Also write camera_placement_plan.png + cameras_config.json (variant A)",
+    )
+    args = parser.parse_args()
+
     if not FLOOR_PLAN_PATH.exists():
         raise SystemExit(
             f"floor_plan.png not found in {SCRIPT_DIR}. "
             "Place the floor plan image alongside this script."
         )
-    render_floor_plan()
-    export_config()
+
+    variants = ["a", "b", "c"] if args.variant == "all" else [args.variant]
+    for vid in variants:
+        generate_variant(vid)
+
+    if args.write_default or args.variant in ("a", "all"):
+        generate_default_outputs()
+
     print("Done.")
+
+
+if __name__ == "__main__":
+    main()

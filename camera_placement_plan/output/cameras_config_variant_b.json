@@ -387,8 +387,8 @@
         "x_mm": 2600,
         "y_mm": 9100,
         "z_mm": 3000,
-        "yaw_deg": 330,
-        "tilt_deg": 35
+        "yaw_deg": 335,
+        "tilt_deg": 40.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -423,8 +423,8 @@
         "x_mm": 2600,
         "y_mm": 5700,
         "z_mm": 3000,
-        "yaw_deg": 25,
-        "tilt_deg": 35
+        "yaw_deg": 30,
+        "tilt_deg": 40.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -459,8 +459,8 @@
         "x_mm": 6200,
         "y_mm": 5400,
         "z_mm": 3000,
-        "yaw_deg": 155,
-        "tilt_deg": 35
+        "yaw_deg": 150,
+        "tilt_deg": 40.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -495,8 +495,8 @@
         "x_mm": 6400,
         "y_mm": 7300,
         "z_mm": 3000,
-        "yaw_deg": 330,
-        "tilt_deg": 35
+        "yaw_deg": 325,
+        "tilt_deg": 40.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -531,8 +531,8 @@
         "x_mm": 17800,
         "y_mm": 5400,
         "z_mm": 3000,
-        "yaw_deg": 155,
-        "tilt_deg": 35
+        "yaw_deg": 160,
+        "tilt_deg": 40.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -567,8 +567,8 @@
         "x_mm": 14200,
         "y_mm": 8700,
         "z_mm": 3000,
-        "yaw_deg": 330,
-        "tilt_deg": 35
+        "yaw_deg": 335,
+        "tilt_deg": 40.0
       },
       "sensor": {
         "model": "oem-poe-board-h3516-imx335",
@@ -630,5 +630,10 @@
       "rotate_deg": 90,
       "as_built_mount_height_cm": 246
     }
-  ]
+  ],
+  "layout_variant": {
+    "id": "b",
+    "label": "Higher overlap for BEV stitch (K/WZ + Yoga)",
+    "status": "candidate"
+  }
 }

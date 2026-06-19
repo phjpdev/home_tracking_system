@@ -143,19 +143,32 @@ BOM and procurement context: [docs/FINAL_CAMERA_SELECTION.md](docs/FINAL_CAMERA_
 ```bash
 cd camera_placement_plan
 pip install matplotlib pillow numpy
-python generate_camera_plan.py
+python generate_camera_plan.py --variant all --write-default
+```
+
+**Phase 0 placement variants** (BEV layout freeze):
+
+```bash
+python generate_camera_plan.py --variant a    # baseline only
+python generate_camera_plan.py --variant b    # higher K/WZ + Yoga overlap
+python generate_camera_plan.py --variant c    # hallway + Yoga/hallway handover
+python generate_camera_plan.py --variant all  # all three + default outputs with --write-default
 ```
 
 Outputs (`output/`):
 
-- **`camera_placement_plan.png`** — full-width annotated plan (thermal footprints + camera FOVs clipped to trackable polygons).
-- **`cameras_config.json`** — `trackable_polygon_mm`, `privacy_thermal_zones_mm`, `thermal_fall_detection`, `privacy_room_sensors`, per-room metadata.
+- **`camera_placement_plan.png`** — canonical plan (variant A when using `--write-default`).
+- **`camera_placement_plan_variant_{a,b,c}.png`** — A/B/C comparison diagrams for on-site trial.
+- **`cameras_config.json`** — canonical JSON (variant A with `--write-default`).
+- **`cameras_config_variant_{a,b,c}.json`** — per-variant poses for scoring.
+
+Site trial: [docs/layout_freeze_checklist.md](../docs/layout_freeze_checklist.md).
 
 Edit the constants in [generate_camera_plan.py](generate_camera_plan.py), then re-run so PNG and JSON stay in sync.
 
 | To change… | Edit… |
 |------------|--------|
-| Camera mount / aim | `CAMERAS` (`x_mm`, `y_mm`, `yaw_deg`, …) |
+| Camera mount / aim | `CAMERAS` (`x_mm`, `y_mm`, `yaw_deg`, …) or `cameras_for_variant()` for A/B/C |
 | K/WZ, Yoga, or Hallway trackable polygon | `TRACKABLE_AREAS_MM` |
 | Fireplace optical blocker | `FIREPLACE_X_MM` |
 | Interior envelope | `INTERIOR_*`, `ROOM_BOUNDS_MM` |

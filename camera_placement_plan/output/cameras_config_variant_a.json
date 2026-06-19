@@ -630,5 +630,10 @@
       "rotate_deg": 90,
       "as_built_mount_height_cm": 246
     }
-  ]
+  ],
+  "layout_variant": {
+    "id": "a",
+    "label": "Baseline (as-built poses)",
+    "status": "candidate"
+  }
 }
